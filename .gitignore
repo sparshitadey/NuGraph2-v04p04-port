@@ -1,0 +1,9 @@
+debugLogswTrace/
+debugRootOutputs/
+fcl_dumps/
+gdbRuns/
+packageBuildLogs/
+valgrind_debug/
+*.root
+*.log
+*.db
