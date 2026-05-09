@@ -426,12 +426,21 @@ See `for_developers/` for the full port guide and diagnostic notebooks. The stru
 for_developers/
 |
 +-- docs/
-|   +-- NuGraph2_Port_Guide_v01p01_v04p04.pdf   <- detailed per-file changes,
-|                                                   common errors, checksums,
-|                                                   and fixes for this port
+|   +-- NuGraph2_Port_Guide_v01p01_v04p04.pdf    # detailed per-file changes,
+|                                                  # common errors, checksums,
+|                                                  # and fixes for this port
 +-- notebooks/
-    +-- caf_branch_comparison.ipynb          <- CAF branch comparison
-    +-- stage1_label_comparison.ipynb    <- stage1 product label comparison
+    +-- diagnostic/
+    |   +-- diagnose_caf_branches.ipynb           # CAF branch comparison
+    |   |   +-- caf_branch_comparison_outputs/    # reference outputs
+    |   +-- diagnose_stage1_labels.ipynb          # stage1 product label comparison
+    |       +-- stage1_caf_propagation_outputs/   # reference outputs
+    +-- patch_generation/
+        +-- generate_package_diffs.ipynb          # generates .patch files for all repos
+        +-- outputs/
+            +-- fileListDiffs/                    # per-repo changed file lists
+            +-- fullPatchDiffs/                   # full .patch files for git apply
+            +-- diff_summary_all_packages.csv     # summary table
 ```
 
 See `for_developers/README.md` for full details.

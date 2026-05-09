@@ -10,11 +10,21 @@ This directory contains the port guide and diagnostic notebooks for the NuGraph2
 for_developers/
 |
 +-- docs/
-|   +-- NuGraph2_Port_Guide_v01p01_v04p04.pdf
-|
+|   +-- NuGraph2_Port_Guide_v01p01_v04p04.pdf    # detailed per-file changes,
+|                                                  # common errors, checksums,
+|                                                  # and fixes for this port
 +-- notebooks/
-    +-- caf_branch_comparison.ipynb
-    +-- stage1_label_comparison.ipynb
+    +-- diagnostic/
+    |   +-- diagnose_caf_branches.ipynb           # CAF branch comparison
+    |   |   +-- caf_branch_comparison_outputs/    # reference outputs (CSVs + plots)
+    |   +-- diagnose_stage1_labels.ipynb          # stage1 product label comparison
+    |       +-- stage1_caf_propagation_outputs/   # reference outputs (CSVs + plots)
+    +-- patch_generation/
+        +-- generate_package_diffs.ipynb          # generates .patch files for all 7 repos
+        +-- outputs/
+            +-- fileListDiffs/                    # per-repo changed file lists
+            +-- fullPatchDiffs/                   # full .patch files for git apply
+            +-- diff_summary_all_packages.csv     # summary table
 ```
 
 ---
@@ -23,7 +33,7 @@ for_developers/
 
 Run these **before touching any code** when starting a new port. They characterise what changed between versions so you know exactly where to focus your effort.
 
-### 1. `caf_branch_comparison.ipynb`
+### 1. `diagnose_caf_branches.ipynb`
 
 **When to use:** Before starting a new port.
 
@@ -41,7 +51,7 @@ Critical finding: `n_only_A = 0` --- no CAF branch was removed or renamed. All 4
 
 ---
 
-### 2. `stage1_label_comparison.ipynb`
+### 2. `diagnose_stage1_labels.ipynb`
 
 **When to use:** Before starting a new port.
 
