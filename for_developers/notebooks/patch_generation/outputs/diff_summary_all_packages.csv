@@ -1,0 +1,8 @@
+repo,base_tag,feature_ref,n_files,patch_size_kb
+icaruscode,v10_06_00_01p01,feature/rtriozzi_cerati_NuGraph2_Filter,38,163.6
+sbnanaobj,v10_00_04,feature/rtriozzi_NuGraph2_MoveVars,5,5.6
+sbncode,v10_06_00_01,feature/llena_CAFMaker_PandoraAfterNuGraph,4,22.7
+lardataobj,v10_00_04,llena/feature-nugraph-multislice,0,0.0
+larrecodnn,v10_01_10,llena/feature/nugraph-multislice,0,0.0
+larpandora,v10_00_19,rtriozzi/feature/rtriozzi_NuGraphInterface,6,11.0
+larpandoracontent,v04_15_01,rtriozzi/feature/rtriozzi_NuGraphInterface,1,9.6

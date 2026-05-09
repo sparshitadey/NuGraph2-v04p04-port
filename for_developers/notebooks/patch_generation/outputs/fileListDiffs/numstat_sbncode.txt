@@ -1,0 +1,4 @@
+28	4	sbncode/CAFMaker/CAFMakerParams.h
+91	36	sbncode/CAFMaker/CAFMaker_module.cc
+112	35	sbncode/CAFMaker/FillReco.cxx
+19	8	sbncode/CAFMaker/FillReco.h

@@ -1,0 +1,3996 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 5bddf043..f751a7de 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -69,6 +69,7 @@ find_package(lardata REQUIRED )
+ find_package(larsim REQUIRED )
+ find_package(larevt REQUIRED )
+ find_package(larreco REQUIRED )
++find_package(larrecodnn REQUIRED )
+ find_package(larana REQUIRED )
+ find_package(larpandora REQUIRED )
+ find_package(larpandoracontent REQUIRED )
+diff --git a/fcl/caf/cafmaker_defs.fcl b/fcl/caf/cafmaker_defs.fcl
+index 50de910f..f0a2734a 100644
+--- a/fcl/caf/cafmaker_defs.fcl
++++ b/fcl/caf/cafmaker_defs.fcl
+@@ -319,6 +319,9 @@ cafmaker.SystWeightLabels: ["genieweight", "fluxweight"]
+ cafmaker.SaveGENIEEventRecord: true # save GENIE event record by default. Turn this off for data cafmaker fcl
+ cafmaker.TPCPMTBarycenterMatchLabel: "tpcpmtbarycentermatch"
+ cafmaker.TrackHitFillRREndCut: 30 # include entire PID region
++cafmaker.NuGraphSlicesLabel: "NCCSlices"
++cafmaker.NuGraphFilterLabel: "NGMultiSlice:filter"
++cafmaker.NuGraphSemanticLabel: "NGMultiSlice:semantic"
+ 
+ # Add CAFMaker to the list of producers
+ caf_preprocess_producers.cafmaker: @local::cafmaker
+diff --git a/fcl/caf/cafmakerjob_icarus_data_NuGraphReco.fcl b/fcl/caf/cafmakerjob_icarus_data_NuGraphReco.fcl
+new file mode 100644
+index 00000000..39118800
+--- /dev/null
++++ b/fcl/caf/cafmakerjob_icarus_data_NuGraphReco.fcl
+@@ -0,0 +1,43 @@
++#include "services_common_icarus.fcl"
++#include "channelmapping_icarus.fcl"
++
++#include "correctionservices_icarus.fcl"
++
++#include "cafmaker_defs.fcl"
++
++process_name: CAFmaker
++
++services:
++{
++  @table::icarus_wirecalibration_minimum_services
++  @table::icarus_random_services  # from services_common_icarus.fcl
++
++  SpaceChargeService: @local::icarus_spacecharge
++}
++
++physics:
++{
++ 
++  producers: {
++    @table::caf_preprocess_data_producers
++  }
++
++  runprod: [ @sequence::caf_preprocess_data_sequence, cafmaker]
++  trigger_paths: [ runprod ] 
++}
++
++physics.producers.cafmaker.G4Label: ""
++physics.producers.cafmaker.GenLabel: ""
++physics.producers.cafmaker.SimChannelLabel: ""
++physics.producers.cafmaker.SystWeightLabels: []
++physics.producers.cafmaker.SaveGENIEEventRecord: false
++
++physics.producers.cafmaker.TriggerLabel: "daqTrigger" # the general configuration, for MC, has a different one (see also https://github.com/SBNSoftware/icaruscode/issues/556)
++
++## Grab the second-pass Pandora reconstruction, after NuGraph2's filter
++physics.producers.cafmaker.PFParticleLabel: "pandoraGausNuGraphReco"
++
++## Use NuGraph2's PID after NuGraph2's filter
++physics.producers.cafmaker.UsePandoraAfterNuGraph: true
++physics.producers.cafmaker.NuGraphFilterLabel: "ngfilteredhits:filter"
++physics.producers.cafmaker.NuGraphSemanticLabel: "ngfilteredhits:semantic"
+\ No newline at end of file
+diff --git a/fcl/caf/cafmakerjob_icarus_detsim2d_NuGraphReco.fcl b/fcl/caf/cafmakerjob_icarus_detsim2d_NuGraphReco.fcl
+new file mode 100644
+index 00000000..f896e3e8
+--- /dev/null
++++ b/fcl/caf/cafmakerjob_icarus_detsim2d_NuGraphReco.fcl
+@@ -0,0 +1,13 @@
++#include "cafmakerjob_icarus.fcl"
++#include "cafmaker_add_detsim2d_icarus.fcl"
++
++## Always refer to the original hit collection
++physics.producers.cafmaker.HitLabel: "cluster3D"
++
++## Grab the second-pass Pandora reconstruction, after NuGraph2's filter
++physics.producers.cafmaker.PFParticleLabel: "pandoraGausNuGraphReco"
++
++## Use NuGraph2's PID after NuGraph2's filter
++physics.producers.cafmaker.UsePandoraAfterNuGraph: true
++physics.producers.cafmaker.NuGraphFilterLabel: "ngfilteredhits:filter"
++physics.producers.cafmaker.NuGraphSemanticLabel: "ngfilteredhits:semantic"
+\ No newline at end of file
+diff --git a/fcl/caf/cafmakerjob_icarus_detsim2d_systtools_and_fluxwgt_NuGraphReco.fcl b/fcl/caf/cafmakerjob_icarus_detsim2d_systtools_and_fluxwgt_NuGraphReco.fcl
+new file mode 100644
+index 00000000..d52c0b2f
+--- /dev/null
++++ b/fcl/caf/cafmakerjob_icarus_detsim2d_systtools_and_fluxwgt_NuGraphReco.fcl
+@@ -0,0 +1,13 @@
++#include "cafmakerjob_icarus_systtools_and_fluxwgt.fcl"
++#include "cafmaker_add_detsim2d_icarus.fcl"
++
++## Always refer to the original hit collection
++physics.producers.cafmaker.HitLabel: "cluster3D"
++
++## Grab the second-pass Pandora reconstruction, after NuGraph2's filter
++physics.producers.cafmaker.PFParticleLabel: "pandoraGausNuGraphReco"
++
++## Use NuGraph2's PID after NuGraph2's filter
++physics.producers.cafmaker.UsePandoraAfterNuGraph: true
++physics.producers.cafmaker.NuGraphFilterLabel: "ngfilteredhits:filter"
++physics.producers.cafmaker.NuGraphSemanticLabel: "ngfilteredhits:semantic"
+\ No newline at end of file
+diff --git a/fcl/reco/Definitions/stage1_icarus_defs.fcl b/fcl/reco/Definitions/stage1_icarus_defs.fcl
+index 22b46744..33bfe37d 100644
+--- a/fcl/reco/Definitions/stage1_icarus_defs.fcl
++++ b/fcl/reco/Definitions/stage1_icarus_defs.fcl
+@@ -22,6 +22,8 @@
+ #include "supera_modules.fcl"
+ #include "crtpmtmatching_parameters.fcl"
+ #include "tpcpmtbarycentermatch_config.fcl"
++#include "pandoramodules_icarus.fcl"
++#include "nugraph_icarus.fcl"
+ 
+ BEGIN_PROLOG
+ 
+@@ -58,10 +60,10 @@ icarus_stage1_producers:
+   SBNShowerGausCryoE:             @local::icarus_pandorashower_3dTraj
+ 
+   # pandora CALO and PID
+-#  pandoraGausCaloCryoW:		      @local::icarus_calomc
+-#  pandoraGausPidCryoW:		        @local::icarus_chi2pid
+-#  pandoraGausCaloCryoE:		      @local::icarus_calomc
+-#  pandoraGausPidCryoE:		        @local::icarus_chi2pid
++  #  pandoraGausCaloCryoW:		    @local::icarus_calomc
++  #  pandoraGausPidCryoW:		      @local::icarus_chi2pid
++  #  pandoraGausCaloCryoE:		    @local::icarus_calomc
++  #  pandoraGausPidCryoE:		      @local::icarus_chi2pid
+ 
+   # Placeholder uncalibrated calorimetry
+   caloskimCalorimetryCryoE:       @local::caloskim_calorimetry
+@@ -74,12 +76,42 @@ icarus_stage1_producers:
+   fmatchopCryoE:                  @local::icarus_simple_flashmatch_E_op
+   fmatchopCryoW:                  @local::icarus_simple_flashmatch_W_op
+ 
+- ## crt producer
+-  crttrack:          @local::standard_crttrackproducer
+-  CRTT0Tagging:         @local::icarus_crtt0tagging_data
++  ## crt producer
++  crttrack:     @local::standard_crttrackproducer
++  CRTT0Tagging: @local::icarus_crtt0tagging_data
+ 
+   tpcpmtbarycentermatchCryoE: @local::data_tpcpmtbarycentermatchproducer_east
+   tpcpmtbarycentermatchCryoW: @local::data_tpcpmtbarycentermatchproducer_west
++
++  ## NuGraph
++  nuslhitsCryoE: @local::nuslhitsCryoE
++  nuslhitsCryoW: @local::nuslhitsCryoW
++
++  NuGraphCryoE: @local::NuGraphCryoE
++  NuGraphCryoW: @local::NuGraphCryoW
++
++  NCCSlicesCryoE: @local::NCCSlicesCryoE
++  NCCSlicesCryoW: @local::NCCSlicesCryoW
++
++  NGMultiSliceCryoE: @local::NGMultiSliceCryoE
++  NGMultiSliceCryoW: @local::NGMultiSliceCryoW
++
++  ngfilteredhitsCryoE: @local::ngfilteredhitsCryoE
++  ngfilteredhitsCryoW: @local::ngfilteredhitsCryoW
++
++  ## Pandora, when running after NuGraph
++  pandoraGausNuGraphRecoCryoE: {
++    @table::icarus_pandora
++    HitFinderModuleLabel:   "ngfilteredhitsCryoE"
++    # CollectHitPredictions:  true
++    # UseHitPredictions:      true
++  }
++  pandoraGausNuGraphRecoCryoW: {
++    @table::icarus_pandora
++    HitFinderModuleLabel:   "ngfilteredhitsCryoW"
++    # CollectHitPredictions:  true
++    # UseHitPredictions:      true
++  }
+ }
+ 
+ icarus_stage1_filters:
+@@ -98,7 +130,7 @@ icarus_stage1_analyzers:
+   superaNu:        @local::icarus_supera_generator_PMT_CRT
+   superaMPVMPR:	   @local::icarus_supera_MC_MPVMPR_cryoE_PMT_CRT
+   superaCosmic:    @local::icarus_supera_cosmgen_all_cryo_PMT_CRT
+-  CRTDataAnalysis: 
++  CRTDataAnalysis:
+    {
+      module_type:   "CRTDataAnalysis"
+      CRTHitLabel:   "crthit"
+@@ -128,11 +160,11 @@ icarus_stage1_analyzers:
+      #  Note1: in the plots a 500 ns offset was added to have start of the gate right at 0.
+      #  Note2: the inBeam parameters were determined experimentally by selecting the beam
+      #  excess time window. At the current state of the CRTPMT filter, the requirement to
+-     #  have the optical flashes within the BeamExcess time window is not applied. 
++     #  have the optical flashes within the BeamExcess time window is not applied.
+ 
+       # note 19/04/2023: parameters are set to run2,
+-      # they can be set to run1, but currently values are the same 
+-   
++      # they can be set to run1, but currently values are the same
++
+       @table::CRTMatchBNBBeamGate_run2
+       @table::CRTMatchNuMIBeamGate_run2
+       @table::CRTPMTmatchingparams_standard
+@@ -154,15 +186,15 @@ icarus_stage1_analyzers_crthittagged.caloskimW.TopCRTDistanceCut_throughgoing: 1
+ ### Below are a list of convenient sequences that can be used for production/typical users. ###
+ 
+ # Set up the standard analysis chain
+-icarus_analysis_modules:           [  caloskimE 
+-                                     ,caloskimW 
++icarus_analysis_modules:           [  caloskimE
++                                     ,caloskimW
+                                      ,simpleLightAna
+                                      ,CRTDataAnalysis
+ 				                             ,CRTAnalysis
+                                    ]
+ 
+-icarus_analysis_modules_nolight:      [  caloskimE 
+-                                     ,caloskimW 
++icarus_analysis_modules_nolight:   [  caloskimE
++                                     ,caloskimW
+                                      ,CRTDataAnalysis
+ 				                             ,CRTAnalysis
+                                    ]
+@@ -178,10 +210,12 @@ icarus_analysis_superaNu:          [ superaNu
+ 
+ icarus_analysis_superaMPVMPR:      [ superaMPVMPR
+                                    ]
++
+ icarus_analysis_superaCosmic:      [ superaCosmic
+-				   ]
++				                           ]
++
+ icarus_analysis_larcv_modules:     [  @sequence::icarus_analysis_modules
+-                                     ,@sequence::icarus_analysis_supera 
++                                     ,@sequence::icarus_analysis_supera
+                                    ]
+ 
+ icarus_EastHits_TPC:               [ gaushit1dTPCEW,
+@@ -191,6 +225,7 @@ icarus_EastHits_TPC:               [ gaushit1dTPCEW,
+ icarus_WestHits_TPC:               [ gaushit1dTPCWW,
+                                      gaushit1dTPCWE
+                                    ]
++                                   
+ icarus_EastHits2d_TPC:             [ gaushit2dTPCEW,
+                                      gaushit2dTPCEE
+                                    ]
+@@ -201,7 +236,7 @@ icarus_WestHits2d_TPC:             [ gaushit2dTPCWW,
+ 
+ # Set up filtering of cluster3D hits by cryostat
+ # Changed slightly to faciliate larcv processing
+-icarus_filter1D_cluster3D:         [ 
++icarus_filter1D_cluster3D:         [
+                                      @sequence::icarus_EastHits_TPC,
+                                      @sequence::icarus_WestHits_TPC,
+                                      cluster3DCryoE,
+@@ -210,7 +245,7 @@ icarus_filter1D_cluster3D:         [
+                                      TPCHitFilterCryoW
+                                    ]
+ 
+-icarus_filter2D_cluster3D:         [ 
++icarus_filter2D_cluster3D:         [
+                                      @sequence::icarus_EastHits2d_TPC,
+                                      @sequence::icarus_WestHits2d_TPC,
+                                      cluster3DCryoE,
+@@ -224,37 +259,61 @@ icarus_reco_cluster3DCryoW:        [ cluster3DCryoW ]
+ 
+ icarus_reco_cluster3DCryoE:        [ cluster3DCryoE ]
+ 
+-icarus_reco_pandoraGausCryoW:      [ pandoraGausCryoW,
++icarus_reco_pandoraGausCryoW:      [ pandoraGausCryoW ]
++
++icarus_reco_pandoraGausCryoE:      [ pandoraGausCryoE ]
++
++icarus_reco_postPandoraGausCryoW:  [ NCCSlicesCryoW,
++                                     NGMultiSliceCryoW,
+                                      pandoraTrackGausCryoW,
+                                      pandoraKalmanTrackGausCryoW,
+                                      SBNShowerGausCryoW
+                                    ]
+ 
+-icarus_reco_pandoraGausCryoE:      [ pandoraGausCryoE,
++icarus_reco_postPandoraGausCryoW_NuGraphReco:   [ NCCSlicesCryoW,
++                                                  NGMultiSliceCryoW,
++                                                  ngfilteredhitsCryoW,
++                                                  pandoraGausNuGraphRecoCryoW,
++                                                  pandoraTrackGausCryoW,
++                                                  pandoraKalmanTrackGausCryoW,
++                                                  SBNShowerGausCryoW
++                                                ]
++
++icarus_reco_postPandoraGausCryoE:  [ NCCSlicesCryoE,
++                                     NGMultiSliceCryoE,
+                                      pandoraTrackGausCryoE,
+                                      pandoraKalmanTrackGausCryoE,
+                                      SBNShowerGausCryoE
+                                    ]
+ 
++icarus_reco_postPandoraGausCryoE_NuGraphReco:   [ NCCSlicesCryoE,
++                                                  NGMultiSliceCryoE,
++                                                  ngfilteredhitsCryoE,
++                                                  pandoraGausNuGraphRecoCryoE,
++                                                  pandoraTrackGausCryoE,
++                                                  pandoraKalmanTrackGausCryoE,
++                                                  SBNShowerGausCryoE
++                                                ]
++
+ icarus_reco_Gauss1D_CryoW:         [ 
+                                      @sequence::icarus_WestHits_TPC,
+                                      @sequence::icarus_reco_cluster3DCryoW,
+                                      @sequence::icarus_reco_pandoraGausCryoW
+                                    ]
+ 
+-icarus_reco_Gauss1D_CryoE:         [ 
++icarus_reco_Gauss1D_CryoE:         [
+                                      @sequence::icarus_EastHits_TPC,
+                                      @sequence::icarus_reco_cluster3DCryoE,
+                                      @sequence::icarus_reco_pandoraGausCryoE
+                                    ]
+ 
+-icarus_reco_Gauss2D_CryoW:         [ 
++icarus_reco_Gauss2D_CryoW:         [
+                                      @sequence::icarus_WestHits2d_TPC,
+                                      @sequence::icarus_reco_cluster3DCryoW,
+                                      @sequence::icarus_reco_pandoraGausCryoW
+                                    ]
+ 
+-icarus_reco_Gauss2D_CryoE:           [ 
++icarus_reco_Gauss2D_CryoE:           [
+                                      @sequence::icarus_EastHits2d_TPC,
+                                      @sequence::icarus_reco_cluster3DCryoE,
+                                      @sequence::icarus_reco_pandoraGausCryoE
+@@ -265,6 +324,16 @@ icarus_pandora_Gauss:              [
+                                      @sequence::icarus_reco_pandoraGausCryoW
+                                    ]
+ 
++icarus_postPandora_Gauss:          [
++                                     @sequence::icarus_reco_postPandoraGausCryoE,
++                                     @sequence::icarus_reco_postPandoraGausCryoW
++                                   ]
++
++icarus_postPandora_Gauss_NuGraphReco: [
++                                        @sequence::icarus_reco_postPandoraGausCryoE_NuGraphReco,
++                                        @sequence::icarus_reco_postPandoraGausCryoW_NuGraphReco
++                                      ]
++
+ #Add flash matching
+ icarus_reco_fm:                    [ fmatchCryoE,
+                                      fmatchCryoW,
+@@ -272,7 +341,7 @@ icarus_reco_fm:                    [ fmatchCryoE,
+                                      fmatchopCryoW ]
+ 
+ icarus_tpcpmtbarycentermatch:      [
+-                                     tpcpmtbarycentermatchCryoE, 
++                                     tpcpmtbarycentermatchCryoE,
+                                      tpcpmtbarycentermatchCryoW
+                                    ]
+ 
+@@ -316,10 +385,10 @@ icarus_stage1_producers.gaushit2dTPCWW.HitFilterAlg.MinPulseHeight:
+ 
+ ## Overrides for filtering of cluster3D hits
+ icarus_stage1_filters.TPCHitFilterCryoW.HitDataLabelVec: ["cluster3DCryoW"]
+-icarus_stage1_filters.TPCHitFilterCryoW.MaximumHits:     60000 
++icarus_stage1_filters.TPCHitFilterCryoW.MaximumHits:     60000
+ 
+ icarus_stage1_filters.TPCHitFilterCryoE.HitDataLabelVec: ["cluster3DCryoE"]
+-icarus_stage1_filters.TPCHitFilterCryoE.MaximumHits:     60000 
++icarus_stage1_filters.TPCHitFilterCryoE.MaximumHits:     60000
+ 
+ ## Definitions for running the 3D clustering by Cryostat
+ icarus_stage1_producers.cluster3DCryoW.MakeSpacePointsOnly:                                      true
+@@ -338,30 +407,32 @@ icarus_stage1_producers.cluster3DCryoE.Hit3DBuilderAlg.MaxHitChiSquare:
+ icarus_stage1_producers.cluster3DCryoE.Hit3DBuilderAlg.MaxMythicalChiSquare:                     30.
+ icarus_stage1_producers.cluster3DCryoE.Hit3DBuilderAlg.OutputHistograms:                         false
+ 
+-### Definitions for a pandora by cryostat
++### Definitions for Pandora by cryostat
++icarus_stage1_producers.pandoraGausCryoE.HitFinderModuleLabel:                                   "cluster3DCryoE"
+ icarus_stage1_producers.pandoraGausCryoW.HitFinderModuleLabel:                                   "cluster3DCryoW"
+-icarus_stage1_producers.pandoraTrackGausCryoW.PFParticleLabel:                                   "pandoraGausCryoW"
+-icarus_stage1_producers.pandoraTrackGausCryoW.UseAllParticles:                                   true
+-icarus_stage1_producers.pandoraKalmanTrackGausCryoW.inputCollection:                             "pandoraGausCryoW"
+-icarus_stage1_producers.pandoraKalmanTrackGausCryoW.trackInputTag:                               "pandoraTrackGausCryoW"
+ 
+-icarus_stage1_producers.pandoraGausCryoE.HitFinderModuleLabel:                                   "cluster3DCryoE"
++### Definitions for Pandora tracks by cryostat
+ icarus_stage1_producers.pandoraTrackGausCryoE.PFParticleLabel:                                   "pandoraGausCryoE"
+ icarus_stage1_producers.pandoraTrackGausCryoE.UseAllParticles:                                   true
++icarus_stage1_producers.pandoraTrackGausCryoW.PFParticleLabel:                                   "pandoraGausCryoW"
++icarus_stage1_producers.pandoraTrackGausCryoW.UseAllParticles:                                   true
++
+ icarus_stage1_producers.pandoraKalmanTrackGausCryoE.inputCollection:                             "pandoraGausCryoE"
+ icarus_stage1_producers.pandoraKalmanTrackGausCryoE.trackInputTag:                               "pandoraTrackGausCryoE"
++icarus_stage1_producers.pandoraKalmanTrackGausCryoW.inputCollection:                             "pandoraGausCryoW"
++icarus_stage1_producers.pandoraKalmanTrackGausCryoW.trackInputTag:                               "pandoraTrackGausCryoW"
++
++### Definitions for Pandora showers by cryostat
++icarus_stage1_producers.SBNShowerGausCryoE.PFParticleLabel:                                      "pandoraGausCryoE"
++icarus_stage1_producers.SBNShowerGausCryoE.UseAllParticles:                                      true
++icarus_stage1_producers.SBNShowerGausCryoW.PFParticleLabel:                                      "pandoraGausCryoW"
++icarus_stage1_producers.SBNShowerGausCryoW.UseAllParticles:                                      true
+ 
+ icarus_stage1_producers.caloskimCalorimetryCryoE.TrackModuleLabel:                               "pandoraTrackGausCryoE"
+ icarus_stage1_producers.caloskimCalorimetryCryoW.TrackModuleLabel:                               "pandoraTrackGausCryoW"
+ 
+ ## Switch pandora back to just gaushits?
+-#icarus_stage1_producers.pandoraGausCryoW.ConfigFile:                                             "PandoraSettings_Master_ICARUS_RawICARUS.xml"
+-#icarus_stage1_producers.pandoraGausCryoE.ConfigFile:                                             "PandoraSettings_Master_ICARUS_RawICARUS.xml"
+-
+-## Definitions for shower finding (both single and by cryostat)
+-icarus_stage1_producers.SBNShowerGausCryoW.PFParticleLabel:                                      "pandoraGausCryoW"
+-icarus_stage1_producers.SBNShowerGausCryoW.UseAllParticles:                                      true
+-icarus_stage1_producers.SBNShowerGausCryoE.PFParticleLabel:                                      "pandoraGausCryoE"
+-icarus_stage1_producers.SBNShowerGausCryoE.UseAllParticles:                                      true
++#icarus_stage1_producers.pandoraGausCryoW.ConfigFile:                                            "PandoraSettings_Master_ICARUS_RawICARUS.xml"
++#icarus_stage1_producers.pandoraGausCryoE.ConfigFile:                                            "PandoraSettings_Master_ICARUS_RawICARUS.xml"
+ 
+ END_PROLOG
+diff --git a/fcl/reco/Stage1/data/stage1_run2_1d_icarus.fcl b/fcl/reco/Stage1/data/stage1_run2_1d_icarus.fcl
+index 4a6e2898..f67a3b5d 100644
+--- a/fcl/reco/Stage1/data/stage1_run2_1d_icarus.fcl
++++ b/fcl/reco/Stage1/data/stage1_run2_1d_icarus.fcl
+@@ -5,6 +5,7 @@ physics.reco: [ @sequence::icarus_filter1D_cluster3D,
+                 @sequence::icarus_pandora_Gauss,
+                 @sequence::icarus_reco_fm,
+                 @sequence::icarus_tpcpmtbarycentermatch,
++                @sequence::icarus_postPandora_Gauss,
+                 @sequence::icarus_crttrack,
+                 @sequence::icarus_crtt0tagging,
+                 caloskimCalorimetryCryoE, caloskimCalorimetryCryoW]
+diff --git a/fcl/reco/Stage1/data/stage1_run2_1d_icarus_NuGraphReco.fcl b/fcl/reco/Stage1/data/stage1_run2_1d_icarus_NuGraphReco.fcl
+new file mode 100644
+index 00000000..131d5972
+--- /dev/null
++++ b/fcl/reco/Stage1/data/stage1_run2_1d_icarus_NuGraphReco.fcl
+@@ -0,0 +1,13 @@
++#include "stage1_run2_icarus_NuGraphReco.fcl"
++
++physics.reco: [ @sequence::icarus_filter1D_cluster3D,
++                @sequence::icarus_pandora_Gauss,
++                @sequence::icarus_reco_fm,
++                @sequence::icarus_postPandora_Gauss_NuGraphReco,
++                @sequence::icarus_tpcpmtbarycentermatch,
++                @sequence::icarus_crttrack,
++                @sequence::icarus_crtt0tagging,
++                caloskimCalorimetryCryoE, caloskimCalorimetryCryoW]
++
++physics.producers.cluster3DCryoW.Hit3DBuilderAlg.HitFinderTagVec: ["gaushit1dTPCWW", "gaushit1dTPCWE"]
++physics.producers.cluster3DCryoE.Hit3DBuilderAlg.HitFinderTagVec: ["gaushit1dTPCEW", "gaushit1dTPCEE"]
+diff --git a/fcl/reco/Stage1/data/stage1_run2_icarus.fcl b/fcl/reco/Stage1/data/stage1_run2_icarus.fcl
+index 53f70ccb..80219d08 100644
+--- a/fcl/reco/Stage1/data/stage1_run2_icarus.fcl
++++ b/fcl/reco/Stage1/data/stage1_run2_icarus.fcl
+@@ -6,6 +6,7 @@ physics.reco: [ @sequence::icarus_filter2D_cluster3D,
+                 @sequence::icarus_pandora_Gauss,
+                 @sequence::icarus_reco_fm,
+                 @sequence::icarus_tpcpmtbarycentermatch,
++                @sequence::icarus_postPandora_Gauss,
+                 @sequence::icarus_crttrack,
+                 @sequence::icarus_crtt0tagging,
+                 caloskimCalorimetryCryoE, caloskimCalorimetryCryoW]
+diff --git a/fcl/reco/Stage1/data/stage1_run2_icarus_NuGraphReco.fcl b/fcl/reco/Stage1/data/stage1_run2_icarus_NuGraphReco.fcl
+new file mode 100644
+index 00000000..5cb274cc
+--- /dev/null
++++ b/fcl/reco/Stage1/data/stage1_run2_icarus_NuGraphReco.fcl
+@@ -0,0 +1,81 @@
++#include "stage1_icarus_driver_common.fcl"
++
++process_name: stage1
++
++physics.reco: [ @sequence::icarus_filter2D_cluster3D,
++                @sequence::icarus_pandora_Gauss,
++                @sequence::icarus_reco_fm,
++                @sequence::icarus_postPandora_Gauss_NuGraphReco,
++                @sequence::icarus_tpcpmtbarycentermatch,
++                @sequence::icarus_crttrack,
++                @sequence::icarus_crtt0tagging,
++                caloskimCalorimetryCryoE, caloskimCalorimetryCryoW]
++
++physics.outana:            [ @sequence::icarus_analysis_modules ]
++physics.trigger_paths:     [ reco ]
++physics.end_paths:         [ outana, stream1 ]
++outputs.out1.fileName:     "%ifb_%tc-%p.root"
++outputs.out1.dataTier:     "reconstructed"
++outputs.out1.SelectEvents: [ reco ]
++outputs.out1.outputCommands: [
++  "keep *_*_*_*",
++  "drop *_caloskimCalorimetryCryoE_*_*",
++  "drop *_caloskimCalorimetryCryoW_*_*"
++]
++
++# Redefine TPCPMTBarycenterMatch producers with the different Pandora label
++physics.producers.tpcpmtbarycentermatchCryoE.PandoraLabel: "pandoraGausNuGraphReco"
++physics.producers.tpcpmtbarycentermatchCryoW.PandoraLabel: "pandoraGausNuGraphReco"
++
++# Update Pandora tags after NuGraph for track and shower characterization
++physics.producers.pandoraTrackGausCryoE.PFParticleLabel:       "pandoraGausNuGraphRecoCryoE"
++physics.producers.pandoraTrackGausCryoE.UseAllParticles:       true
++physics.producers.pandoraTrackGausCryoW.PFParticleLabel:       "pandoraGausNuGraphRecoCryoW"
++physics.producers.pandoraTrackGausCryoW.UseAllParticles:       true
++
++physics.producers.pandoraKalmanTrackGausCryoE.inputCollection: "pandoraGausNuGraphRecoCryoE"
++physics.producers.pandoraKalmanTrackGausCryoE.trackInputTag:   "pandoraTrackGausCryoE"
++physics.producers.pandoraKalmanTrackGausCryoW.inputCollection: "pandoraGausNuGraphRecoCryoW"
++physics.producers.pandoraKalmanTrackGausCryoW.trackInputTag:   "pandoraTrackGausCryoW"
++
++physics.producers.SBNShowerGausCryoE.PFParticleLabel:          "pandoraGausNuGraphRecoCryoE"
++physics.producers.SBNShowerGausCryoE.UseAllParticles:          true
++physics.producers.SBNShowerGausCryoW.PFParticleLabel:          "pandoraGausNuGraphRecoCryoW"
++physics.producers.SBNShowerGausCryoW.UseAllParticles:          true
++
++physics.analyzers.caloskimE.SelectEvents: [reco]
++physics.analyzers.caloskimW.SelectEvents: [reco]
++
++# Disabled Space-Charge service for calorimetry
++services.SpaceChargeService: {
++    EnableCalEfieldSCE: false
++    EnableCalSpatialSCE: false
++    EnableCorrSCE: false
++    EnableSimEfieldSCE: false
++    EnableSimSpatialSCE: false
++    InputFilename: "SCEoffsets/SCEoffsets_ICARUS_E500_voxelTH3.root"
++    RepresentationType: "Voxelized_TH3"
++    service_provider: "SpaceChargeServiceICARUS"
++}
++
++services.message.destinations :
++{
++  STDCOUT:
++  {
++     type:      "cout"      #tells the message service to output this destination to cout
++     threshold: "WARNING"   #tells the message service that this destination applies to WARNING and higher level messages
++     categories:
++     {
++       Cluster3DICARUS:
++       {
++         limit: 5
++         reportEvery: 1
++       }
++       SnippetHit3D:
++       {
++         limit: 5
++         reportEvery: 1
++       }
++     }
++  }
++}
+\ No newline at end of file
+diff --git a/fcl/reco/Stage1/mc/stage1_run2_1d_icarus_MC.fcl b/fcl/reco/Stage1/mc/stage1_run2_1d_icarus_MC.fcl
+index 85b15539..9c3d0daa 100644
+--- a/fcl/reco/Stage1/mc/stage1_run2_1d_icarus_MC.fcl
++++ b/fcl/reco/Stage1/mc/stage1_run2_1d_icarus_MC.fcl
+@@ -1,11 +1,12 @@
+ 
+ #include "stage1_run2_icarus_MC.fcl"
+ 
+-physics.reco: [ 
++physics.reco: [
+                 @sequence::icarus_reco_Gauss1D_CryoE ,
+                 @sequence::icarus_reco_Gauss1D_CryoW ,
+                 @sequence::icarus_reco_fm,
+                 @sequence::icarus_tpcpmtbarycentermatch,
++                @sequence::icarus_postPandora_Gauss,
+                 @sequence::icarus_crttrack,
+                 @sequence::icarus_crtt0tagging,
+                 caloskimCalorimetryCryoE, caloskimCalorimetryCryoW,
+diff --git a/fcl/reco/Stage1/mc/stage1_run2_1d_icarus_NuGraphReco_MC.fcl b/fcl/reco/Stage1/mc/stage1_run2_1d_icarus_NuGraphReco_MC.fcl
+new file mode 100644
+index 00000000..121e7a2d
+--- /dev/null
++++ b/fcl/reco/Stage1/mc/stage1_run2_1d_icarus_NuGraphReco_MC.fcl
+@@ -0,0 +1,19 @@
++#include "stage1_run2_icarus_NuGraphReco_MC.fcl"
++
++physics.reco: [ 
++                @sequence::icarus_reco_Gauss1D_CryoE ,
++                @sequence::icarus_reco_Gauss1D_CryoW ,
++                @sequence::icarus_reco_fm,
++                @sequence::icarus_postPandora_Gauss_NuGraphReco,
++                @sequence::icarus_tpcpmtbarycentermatch,
++                @sequence::icarus_crttrack,
++                @sequence::icarus_crtt0tagging,
++                caloskimCalorimetryCryoE, 
++                caloskimCalorimetryCryoW,
++                mcassociationsGausCryoE, 
++                mcassociationsGausCryoW,
++                mcreco
++              ]
++
++physics.producers.cluster3DCryoW.Hit3DBuilderAlg.HitFinderTagVec: ["gaushit1dTPCWW", "gaushit1dTPCWE"]
++physics.producers.cluster3DCryoE.Hit3DBuilderAlg.HitFinderTagVec: ["gaushit1dTPCEW", "gaushit1dTPCEE"]
+diff --git a/fcl/reco/Stage1/mc/stage1_run2_icarus_MC.fcl b/fcl/reco/Stage1/mc/stage1_run2_icarus_MC.fcl
+index 0009c080..58333418 100644
+--- a/fcl/reco/Stage1/mc/stage1_run2_icarus_MC.fcl
++++ b/fcl/reco/Stage1/mc/stage1_run2_icarus_MC.fcl
+@@ -53,6 +53,7 @@ physics.reco: [
+                 @sequence::icarus_reco_Gauss2D_CryoW ,
+                 @sequence::icarus_reco_fm,
+                 @sequence::icarus_tpcpmtbarycentermatch,
++                @sequence::icarus_postPandora_Gauss,
+                 @sequence::icarus_crttrack,
+                 @sequence::icarus_crtt0tagging,
+                 caloskimCalorimetryCryoE, caloskimCalorimetryCryoW,
+@@ -71,7 +72,7 @@ outputs.out1.outputCommands: [
+   "drop *_caloskimCalorimetryCryoW_*_*"
+ ]
+ 
+-#Redefine TPCPMTBarycenterMatch producers with MC parameters
++# Redefine TPCPMTBarycenterMatch producers with MC parameters
+ physics.producers.tpcpmtbarycentermatchCryoE: @local::mc_tpcpmtbarycentermatchproducer_east
+ physics.producers.tpcpmtbarycentermatchCryoW: @local::mc_tpcpmtbarycentermatchproducer_west
+ 
+@@ -86,6 +87,7 @@ physics.analyzers.caloskimW.SimChannelproducer: "merge"
+ physics.analyzers.caloskimW.RawDigitproducers: ["MCDecodeTPCROI:PHYSCRATEDATATPCWW", "MCDecodeTPCROI:PHYSCRATEDATATPCWE"]
+ physics.analyzers.caloskimW.SelectEvents: [reco]
+ 
++# Truth-matching for interactions
+ physics.producers.mcassociationsGausCryoE.HitParticleAssociations.HitModuleLabelVec: ["cluster3DCryoE"]
+ physics.producers.mcassociationsGausCryoW.HitParticleAssociations.HitModuleLabelVec: ["cluster3DCryoW"]
+ 
+@@ -103,7 +105,7 @@ physics.producers.mcreco.UseSimEnergyDeposit: false
+ physics.producers.mcreco.IncludeDroppedParticles: true #this is now true with larsoft v09_89 and newer
+ physics.producers.mcreco.MCParticleDroppedLabel: "largeant:droppedMCParticles"
+ physics.producers.mcreco.MCRecoPart.SavePathPDGList: [13,-13,211,-211,111,311,310,130,321,-321,2212,2112,2224,2214,2114,1114,3122,1000010020,1000010030,1000020030,1000020040]
+-physics.producers.mcreco.MCRecoPart.TrackIDOffsets: [0,10000000,20000000] #Account for track ID offsets in labeling primaries
++physics.producers.mcreco.MCRecoPart.TrackIDOffsets: [0,10000000,20000000] # Account for track ID offsets in labeling primaries
+ 
+ services.message.destinations :
+ {
+diff --git a/fcl/reco/Stage1/mc/stage1_run2_icarus_NuGraphReco_MC.fcl b/fcl/reco/Stage1/mc/stage1_run2_icarus_NuGraphReco_MC.fcl
+new file mode 100644
+index 00000000..12fe2e83
+--- /dev/null
++++ b/fcl/reco/Stage1/mc/stage1_run2_icarus_NuGraphReco_MC.fcl
+@@ -0,0 +1,147 @@
++#include "mchitmodules.fcl"
++#include "mctrutht0matching.fcl"
++#include "mcreco.fcl"
++#include "backtrackerservice.fcl"
++#include "particleinventoryservice.fcl"
++#include "stage1_icarus_driver_common.fcl"
++
++process_name: MCstage1
++
++# Disabled Space-Charge service for calorimetry
++services.SpaceChargeService: {
++  EnableCalEfieldSCE: false
++  EnableCalSpatialSCE: false
++  EnableCorrSCE: false
++  EnableSimEfieldSCE: false
++  EnableSimSpatialSCE: false
++  InputFilename: "SCEoffsets/SCEoffsets_ICARUS_E500_voxelTH3.root"
++  RepresentationType: "Voxelized_TH3"
++  service_provider: "SpaceChargeServiceICARUS"
++}
++
++services.BackTrackerService:  @local::standard_backtrackerservice
++# In the 2D-detsim, SimChannel objects are made by the WireCell
++# drift simulation (daq), not LArG4 (largeant). Thus, we need
++# to overwrite the truth matching labels in the calibration ntuple maker
++services.BackTrackerService.BackTracker.SimChannelModuleLabel:  "merge"
++services.ParticleInventoryService:  @local::standard_particleinventoryservice
++
++# Add the MC module to the list of producers
++physics.producers: {
++  @table::icarus_stage1_producers
++
++  # mcophit:                        @local::ICARUSMCOpHit
++  mcopflashTPC0:                  @local::ICARUSMCOpFlashTPC0
++  mcopflashTPC1:                  @local::ICARUSMCOpFlashTPC1
++  mcopflashTPC2:                  @local::ICARUSMCOpFlashTPC2
++  mcopflashTPC3:                  @local::ICARUSMCOpFlashTPC3
++
++  cheatopflashTPC0:               @local::ICARUSCheatOpFlashTPC0
++  cheatopflashTPC1:               @local::ICARUSCheatOpFlashTPC1
++  cheatopflashTPC2:               @local::ICARUSCheatOpFlashTPC2
++  cheatopflashTPC3:               @local::ICARUSCheatOpFlashTPC3
++
++  ### mc producers
++  mcreco:                         @local::standard_mcreco
++  mchitfinder:                    @local::standard_mchitfinder
++  mcassociationsGausCryoE:        @local::standard_mcparticlehitmatching
++  mcassociationsGausCryoW:        @local::standard_mcparticlehitmatching
++}
++
++physics.reco: [ 
++                @sequence::icarus_reco_Gauss2D_CryoE ,
++                @sequence::icarus_reco_Gauss2D_CryoW ,
++                @sequence::icarus_reco_fm,
++                @sequence::icarus_postPandora_Gauss_NuGraphReco,
++                @sequence::icarus_tpcpmtbarycentermatch,
++                @sequence::icarus_crttrack,
++                @sequence::icarus_crtt0tagging,
++                caloskimCalorimetryCryoE, 
++                caloskimCalorimetryCryoW,
++                mcassociationsGausCryoE,  
++                mcassociationsGausCryoW,
++                mcreco
++              ]
++
++physics.outana:            [ @sequence::icarus_analysis_modules ]
++physics.trigger_paths:     [ reco ]
++physics.end_paths:         [ outana, stream1 ]
++outputs.out1.fileName:     "%ifb_%tc-%p.root"
++outputs.out1.dataTier:     "reconstructed"
++outputs.out1.outputCommands: [
++  "keep *_*_*_*",
++  "drop *_caloskimCalorimetryCryoE_*_*",
++  "drop *_caloskimCalorimetryCryoW_*_*"
++]
++
++# Redefine TPCPMTBarycenterMatch producers with MC parameters and with the different Pandora label
++# Also, relax a bit the allowed charge-to-light time overlap
++physics.producers.tpcpmtbarycentermatchCryoE: @local::mc_tpcpmtbarycentermatchproducer_east
++physics.producers.tpcpmtbarycentermatchCryoW: @local::mc_tpcpmtbarycentermatchproducer_west
++
++physics.producers.tpcpmtbarycentermatchCryoE.PandoraLabel: "pandoraGausNuGraphReco"
++physics.producers.tpcpmtbarycentermatchCryoW.PandoraLabel: "pandoraGausNuGraphReco"
++
++# Turn on truth-info for track skimmer 
++physics.analyzers.caloskimE.G4producer:         "largeant"
++physics.analyzers.caloskimE.SimChannelproducer: "merge"
++physics.analyzers.caloskimE.RawDigitproducers:  ["MCDecodeTPCROI:PHYSCRATEDATATPCEW", "MCDecodeTPCROI:PHYSCRATEDATATPCEE"]
++physics.analyzers.caloskimE.SelectEvents:       [reco]
++
++physics.analyzers.caloskimW.G4producer:         "largeant"
++physics.analyzers.caloskimW.SimChannelproducer: "merge"
++physics.analyzers.caloskimW.RawDigitproducers:  ["MCDecodeTPCROI:PHYSCRATEDATATPCWW", "MCDecodeTPCROI:PHYSCRATEDATATPCWE"]
++physics.analyzers.caloskimW.SelectEvents:       [reco]
++
++# Truth-matching for interactions
++physics.producers.mcassociationsGausCryoE.HitParticleAssociations.HitModuleLabelVec:  ["cluster3DCryoE"]
++physics.producers.mcassociationsGausCryoW.HitParticleAssociations.HitModuleLabelVec:  ["cluster3DCryoW"]
++
++# Remove missing products in MC
++physics.analyzers.simpleLightAna.TriggerLabel:        ""
++physics.analyzers.simpleLightAna.RWMLabel:            ""
++physics.analyzers.simpleLightAna.OpDetWaveformLabels: ["opdaq"]
++
++# Configure mcreco to read SEDLite instead of SED and MCParticleLite in addition to MCParticle
++physics.producers.mcreco.G4ModName: @erase
++physics.producers.mcreco.SimChannelLabel:             "filtersed"
++physics.producers.mcreco.MCParticleLabel:             "largeant"
++physics.producers.mcreco.UseSimEnergyDepositLite:     true
++physics.producers.mcreco.UseSimEnergyDeposit:         false
++physics.producers.mcreco.IncludeDroppedParticles:     true #this is now true with larsoft v09_89 and newer
++physics.producers.mcreco.MCParticleDroppedLabel:      "largeant:droppedMCParticles"
++physics.producers.mcreco.MCRecoPart.SavePathPDGList:  [13,-13,211,-211,111,311,310,130,321,-321,2212,2112,2224,2214,2114,1114,3122,1000010020,1000010030,1000020030,1000020040]
++physics.producers.mcreco.MCRecoPart.TrackIDOffsets:   [0,10000000,20000000] #Account for track ID offsets in labeling primaries
++
++# Update Pandora tags after NuGraph for track and shower characterization
++physics.producers.pandoraTrackGausCryoE.PFParticleLabel:       "pandoraGausNuGraphRecoCryoE"
++physics.producers.pandoraTrackGausCryoE.UseAllParticles:       true
++physics.producers.pandoraTrackGausCryoW.PFParticleLabel:       "pandoraGausNuGraphRecoCryoW"
++physics.producers.pandoraTrackGausCryoW.UseAllParticles:       true
++
++physics.producers.pandoraKalmanTrackGausCryoE.inputCollection: "pandoraGausNuGraphRecoCryoE"
++physics.producers.pandoraKalmanTrackGausCryoE.trackInputTag:   "pandoraTrackGausCryoE"
++physics.producers.pandoraKalmanTrackGausCryoW.inputCollection: "pandoraGausNuGraphRecoCryoW"
++physics.producers.pandoraKalmanTrackGausCryoW.trackInputTag:   "pandoraTrackGausCryoW"
++
++physics.producers.SBNShowerGausCryoE.PFParticleLabel:          "pandoraGausNuGraphRecoCryoE"
++physics.producers.SBNShowerGausCryoE.UseAllParticles:          true
++physics.producers.SBNShowerGausCryoW.PFParticleLabel:          "pandoraGausNuGraphRecoCryoW"
++physics.producers.SBNShowerGausCryoW.UseAllParticles:          true
++
++services.message.destinations :
++{
++  STDCOUT:
++  {
++     type:      "cout"      #tells the message service to output this destination to cout
++     threshold: "WARNING"   #tells the message service that this destination applies to WARNING and higher level messages
++     categories:
++     {
++       Cluster3DICARUS:
++       {
++         limit: -1
++         reportEvery: 1
++       }
++     }
++  }
++}
+\ No newline at end of file
+diff --git a/fcl/reco/Stage1/overlay/stage1_run2_icarus_overlay_NuGraphReco.fcl b/fcl/reco/Stage1/overlay/stage1_run2_icarus_overlay_NuGraphReco.fcl
+new file mode 100644
+index 00000000..58981c2d
+--- /dev/null
++++ b/fcl/reco/Stage1/overlay/stage1_run2_icarus_overlay_NuGraphReco.fcl
+@@ -0,0 +1,3 @@
++#include "stage1_run2_icarus_NuGraphReco_MC.fcl"
++
++#include "enable_overlay_stage1.fcl"
+diff --git a/icaruscode/TPC/CMakeLists.txt b/icaruscode/TPC/CMakeLists.txt
+index 3bca0be5..2652769c 100644
+--- a/icaruscode/TPC/CMakeLists.txt
++++ b/icaruscode/TPC/CMakeLists.txt
+@@ -9,3 +9,4 @@ add_subdirectory(Simulation)
+ add_subdirectory(Tracking)
+ add_subdirectory(ICARUSWireCell)
+ add_subdirectory(SPAna)
++add_subdirectory(NuGraph)
+diff --git a/icaruscode/TPC/NuGraph/CMakeLists.txt b/icaruscode/TPC/NuGraph/CMakeLists.txt
+new file mode 100644
+index 00000000..eaf9d4b2
+--- /dev/null
++++ b/icaruscode/TPC/NuGraph/CMakeLists.txt
+@@ -0,0 +1,100 @@
++set(CMAKE_EXPORT_COMPILE_COMMANDS ON) # for clangd autocompletion
++cet_enable_asserts()
++
++set( nugraph_tool_lib_list
++       lardataobj::RecoBase
++       larrecodnn::NuGraphBaseTools
++       TorchScatter::TorchScatter
++       art::Framework_Core
++       hep_concurrency::hep_concurrency
++       art_plugin_types::tool
++)
++
++include_directories($ENV{HEP_HPC_INC})
++
++cet_build_plugin(ICARUSNuGraphLoader art::tool
++  LIBRARIES PRIVATE
++  ${nugraph_tool_lib_list}
++)
++
++cet_build_plugin(ICARUSNuGraphMultiLoader art::tool
++  LIBRARIES PRIVATE
++  ${nugraph_tool_lib_list}
++)
++
++cet_build_plugin(ICARUSNuGraphInference art::EDProducer
++    LIBRARIES PRIVATE
++    ${nugraph_tool_lib_list}
++    IMPL_TARGET_VAR ICARUSNuGraphInference_module
++)
++
++find_path(DELAUNATOR_INC delaunator-header-only.hpp HINTS ENV DELAUNATOR_INC REQUIRED DOC "Header location for delaunator_cpp")
++target_include_directories(${ICARUSNuGraphInference_module} PRIVATE ${DELAUNATOR_INC})
++
++simple_plugin(ICARUSNCCSlicesProducer "module"
++    LIBRARIES PRIVATE
++    art::Framework_Core
++    lardataobj::RecoBase
++)
++
++simple_plugin(ICARUSFilteredNuSliceHitsProducer "module"
++    LIBRARIES PRIVATE
++    art::Framework_Core
++    lardataobj::RecoBase
++    sbnobj::Common_Reco
++)
++
++simple_plugin(ICARUSNuSliceHitsProducer "module"
++    LIBRARIES PRIVATE
++    art::Framework_Core
++    lardataobj::RecoBase
++    sbnobj::Common_Reco
++)
++
++simple_plugin(ICARUSTrueNuSliceHitsProducer "module"
++    LIBRARIES PRIVATE
++    art::Framework_Core
++    nusimdata::SimulationBase
++    lardataobj::RecoBase
++    lardataalg::DetectorInfo
++    sbnobj::Common_Reco
++    larsim::MCCheater_BackTrackerService_service
++    larsim::MCCheater_ParticleInventoryService_service
++    lardata::DetectorClocksService
++)
++
++simple_plugin(ICARUSHDF5Maker "module"
++    LIBRARIES PRIVATE
++    art::Framework_Core
++    nusimdata::SimulationBase
++    larsim::MCCheater_BackTrackerService_service
++    larsim::MCCheater_ParticleInventoryService_service
++    hep_hpc_hdf5
++    lardataobj::RecoBase
++    lardataalg::DetectorInfo
++    lardata::DetectorClocksService
++    larcorealg::Geometry
++    larcore::WireReadout
++    ${HDF5_LIBRARIES}
++)
++
++cet_build_plugin(ICARUSNuGraphAnalyzer art::EDAnalyzer
++    LIBRARIES PRIVATE
++    art_root_io::TFileService_service
++    ROOT::Tree
++    lardata::RecoBaseProxy
++)
++
++cet_build_plugin(ICARUSPandoraHitDumpAnalyzer art::EDAnalyzer
++    LIBRARIES PRIVATE
++    art_root_io::TFileService_service
++    ROOT::Tree
++    lardata::RecoBaseProxy
++    lardataobj::RecoBase
++)
++
++add_subdirectory(scripts)
++
++install_headers()
++install_fhicl()
++install_source()
+diff --git a/icaruscode/TPC/NuGraph/ICARUSFilteredNuSliceHitsProducer_module.cc b/icaruscode/TPC/NuGraph/ICARUSFilteredNuSliceHitsProducer_module.cc
+new file mode 100644
+index 00000000..0497dac3
+--- /dev/null
++++ b/icaruscode/TPC/NuGraph/ICARUSFilteredNuSliceHitsProducer_module.cc
+@@ -0,0 +1,157 @@
++/**
++ * @file    icaruscode/TPC/NuGraph/ICARUSFilteredNuSliceHitsProducer_module.cc
++ * @brief   Producer to filter the input hits according to a configurable NuGraph2 filter score.
++ * @author  Riccardo Triozzi ( triozzi@pd.infn.it )
++ * @date    September 9, 2025
++ */
++
++#include "art/Framework/Core/EDProducer.h"
++#include "art/Framework/Core/ModuleMacros.h"
++#include "art/Framework/Principal/Event.h"
++#include "art/Framework/Principal/Handle.h"
++#include "canvas/Utilities/InputTag.h"
++#include "fhiclcpp/ParameterSet.h"
++#include "messagefacility/MessageLogger/MessageLogger.h"
++#include "canvas/Persistency/Common/FindOneP.h"
++#include "canvas/Persistency/Common/FindManyP.h"
++
++#include <algorithm> 
++#include <cmath> 
++#include <memory>
++#include <unordered_map>
++#include <utility> 
++#include <vector>
++
++#include "lardataobj/RecoBase/OpFlash.h"
++#include "canvas/Persistency/Common/Assns.h"
++#include "art/Persistency/Common/PtrMaker.h"
++#include "lardataobj/RecoBase/Hit.h"
++#include "lardataobj/RecoBase/Slice.h"
++#include "lardataobj/RecoBase/SpacePoint.h"
++#include "lardataobj/AnalysisBase/MVAOutput.h"
++
++#include "sbnobj/Common/Reco/TPCPMTBarycenterMatch.h"
++
++/**
++ * @brief Filters the input hits according to a configurable NuGraph2 filter score.
++ * 
++ * This module gets the slices from a `SliceLabel` (e.g., `NCCSlicesCryoE`, 
++ * corresponding to all the slices tagged as not-clear-cosmic by Pandora in 
++ * the east cryostat) and the associated hit via the corresponding `PandoraLabel`
++ * (e.g., `pandoraGausCryoE`).
++ * For each hit, it grabs the NuGraph2 filter and semantic predictions
++ * from the corresponding `NuGraphLabel` (e.g., `NGMultiSliceCryoE`). 
++ * In the current infrastructure, all the hits are guaranteed to
++ * have a corresponding NuGraph2 prediction.
++ * 
++ * The hits are filtered when their NuGraph2 filter score is above a configurable
++ * `ScoreCut`, by default set to zero. A zero `ScoreCut` means that every hit is
++ * propagated to the output, and no filtering happens.
++ * 
++ * Output
++ * -------
++ * 
++ * Collections of filtered hits, along with their filter and semantic predictions.
++ * Associations between the filtered hits and their filter and semantic predictions.
++ * Both are needed to fit into the current Pandora and CAF infrastructures.
++ * 
++ * Configuration parameters
++ * -------------------------
++ * * `SliceLabel` (string, mandatory): tag of input slices (with cryostat tag), and
++ *     their associations to hits, space points, particle flow objects etc.
++ * * `PandoraLabel` (string, mandatory): tag of Pandora objects (with cryostat tag).
++ * * `NuGraphLabel` (string, mandatory): tag of NuGraph2 predictions 
++ *     (with cryostat tag).
++ * * `ScoreCut` (real, default: 0): hits are filtered when their
++ *     NuGraph2 filter score is <= `ScoreCut`.
++ * 
++ */
++
++class ICARUSFilteredNuSliceHitsProducer : public art::EDProducer {
++
++public:
++  explicit ICARUSFilteredNuSliceHitsProducer(fhicl::ParameterSet const& p);
++
++  ICARUSFilteredNuSliceHitsProducer(ICARUSFilteredNuSliceHitsProducer const&) = delete;
++  ICARUSFilteredNuSliceHitsProducer(ICARUSFilteredNuSliceHitsProducer&&) = delete;
++  ICARUSFilteredNuSliceHitsProducer& operator=(ICARUSFilteredNuSliceHitsProducer const&) = delete;
++  ICARUSFilteredNuSliceHitsProducer& operator=(ICARUSFilteredNuSliceHitsProducer&&) = delete;
++
++private:
++
++  // input tags
++  art::InputTag const fSliceLabel;
++  art::InputTag const fPandoraLabel;
++  art::InputTag const fNGLabel;
++
++  // module parameters
++  float fScoreCut;
++
++  void produce(art::Event& e) override;
++
++};
++
++ICARUSFilteredNuSliceHitsProducer::ICARUSFilteredNuSliceHitsProducer(fhicl::ParameterSet const& p)
++  : EDProducer{p},
++  fSliceLabel(p.get<art::InputTag>("SliceLabel", "NCCSlicesCryoE")),
++  fPandoraLabel{p.get<std::string>("PandoraLabel", "pandoraGausCryoE")},
++  fNGLabel{p.get<std::string>("NuGraphLabel", "NGMultiSliceCryoE")},
++  fScoreCut(p.get<float>("ScoreCut", 0))
++{
++  produces<std::vector<recob::Hit>>();
++  produces<std::vector<anab::FeatureVector<1>>>();
++  produces<std::vector<anab::FeatureVector<5>>>();
++  produces<art::Assns<recob::Hit, anab::FeatureVector<1>>>("filter");
++  produces<art::Assns<recob::Hit, anab::FeatureVector<5>>>("semantic");
++}
++
++void ICARUSFilteredNuSliceHitsProducer::produce(art::Event& e)
++{
++  auto outputHits = std::make_unique<std::vector<recob::Hit>>();
++  auto outputFilter = std::make_unique<std::vector<anab::FeatureVector<1>>>();
++  auto outputSemantic = std::make_unique<std::vector<anab::FeatureVector<5>>>();
++  auto outputHitFilterAssns = std::make_unique<art::Assns<recob::Hit, anab::FeatureVector<1>>>();
++  auto outputHitSemanticAssns = std::make_unique<art::Assns<recob::Hit, anab::FeatureVector<5>>>();
++
++  // Get slices.
++  const std::vector<art::Ptr<recob::Slice>> slices = e.getProduct<std::vector<art::Ptr<recob::Slice>>>(fSliceLabel);
++  art::FindManyP<recob::Hit> sliceToHitsAssoc(slices, e, fPandoraLabel);
++
++  // Get input hits.
++  std::vector<art::Ptr<recob::Hit>> inputHits;
++  for (size_t islc = 0; islc < slices.size(); ++islc) {
++    const std::vector<art::Ptr<recob::Hit>> hitsInSlice = sliceToHitsAssoc.at(islc);
++    for (auto const& h : hitsInSlice) 
++      inputHits.emplace_back(h);
++  }
++  std::cout << "Number of hits before ICARUSFilteredNuSliceHitsProducer: " << inputHits.size() << std::endl;
++
++  // Get NuGraph filter and semantic predictions.
++  art::FindOneP<anab::FeatureVector<1>> hitToNGFilterAssoc(inputHits, e, art::InputTag(fNGLabel.label(), "filter"));
++  art::FindOneP<anab::FeatureVector<5>> hitToNGSemanticAssoc(inputHits, e, art::InputTag(fNGLabel.label(), "semantic"));
++  art::PtrMaker<recob::Hit> hitPtrMaker{e};
++
++  // Filter input hits, re-create filter and sematic objects (needed for Pandora) and associations (needed for CAFs).
++  // By setting `fScoreCut` to zero, not filtering happens and all the hits are propagated.
++  for (size_t ihit = 0; ihit < inputHits.size(); ihit++) {
++    art::Ptr<recob::Hit> hit = inputHits[ihit];
++    if (hitToNGFilterAssoc.at(ihit).isNonnull()) {
++      if (fScoreCut >= 0 && hitToNGFilterAssoc.at(ihit)->at(0) >= fScoreCut) {
++        outputHits->emplace_back(*hit);
++        outputFilter->emplace_back(*hitToNGFilterAssoc.at(ihit));
++        outputSemantic->emplace_back(*hitToNGSemanticAssoc.at(ihit));
++        outputHitFilterAssns->addSingle(hitPtrMaker(outputHits->size() -1), hitToNGFilterAssoc.at(ihit));
++        outputHitSemanticAssns->addSingle(hitPtrMaker(outputHits->size() -1), hitToNGSemanticAssoc.at(ihit));
++      }
++    }
++  }
++  std::cout << "Number of hits after ICARUSFilteredNuSliceHitsProducer: " << outputHits->size() << std::endl;
++  
++  e.put(std::move(outputHits));
++  e.put(std::move(outputFilter));
++  e.put(std::move(outputSemantic));
++  e.put(std::move(outputHitFilterAssns), "filter");
++  e.put(std::move(outputHitSemanticAssns), "semantic");
++}
++
++DEFINE_ART_MODULE(ICARUSFilteredNuSliceHitsProducer)
+\ No newline at end of file
+diff --git a/icaruscode/TPC/NuGraph/ICARUSHDF5Maker_module.cc b/icaruscode/TPC/NuGraph/ICARUSHDF5Maker_module.cc
+new file mode 100644
+index 00000000..c6f80bb6
+--- /dev/null
++++ b/icaruscode/TPC/NuGraph/ICARUSHDF5Maker_module.cc
+@@ -0,0 +1,621 @@
++/**
++ * @file   icaruscode/TPC/NuGraph/ICARUSHDF5Maker_module.cc
++ * @brief  Implementation of `ICARUSHDF5Maker` _art_ module.
++ * @author Giuseppe Cerati (cerati@fnal.gov), V Hewes
++ */
++
++#include "art/Framework/Core/EDAnalyzer.h"
++#include "art/Framework/Core/ModuleMacros.h"
++#include "art/Framework/Principal/Event.h"
++#include "art/Framework/Principal/Handle.h"
++#include "art/Framework/Principal/SubRun.h"
++#include "canvas/Utilities/InputTag.h"
++#include "fhiclcpp/ParameterSet.h"
++#include "canvas/Persistency/Common/FindManyP.h"
++#include "messagefacility/MessageLogger/MessageLogger.h"
++
++#include "larcore/Geometry/Geometry.h"
++#include "larcorealg/Geometry/GeometryCore.h"
++#include "larcorealg/Geometry/PlaneGeo.h"
++#include "larcore/Geometry/WireReadout.h"
++#include "larcorealg/Geometry/WireReadoutGeom.h"
++
++#include "nusimdata/SimulationBase/MCTruth.h"
++#include "lardataobj/RecoBase/Hit.h"
++#include "lardataobj/RecoBase/SpacePoint.h"
++#include "lardataobj/RecoBase/OpHit.h"
++#include "lardataobj/RecoBase/OpFlash.h"
++#include "larcorealg/Geometry/Exceptions.h"
++#include "lardataobj/RecoBase/Slice.h"
++
++#include "larsim/MCCheater/BackTrackerService.h"
++#include "larsim/MCCheater/ParticleInventoryService.h"
++#include "lardata/DetectorInfoServices/DetectorPropertiesService.h"
++#include "lardata/DetectorInfoServices/DetectorClocksService.h"
++
++#include "lardataobj/AnalysisBase/BackTrackerMatchingData.h"
++
++#include "hep_hpc/hdf5/make_ntuple.hpp"
++#include "art/Framework/Services/Registry/ServiceHandle.h"
++#include "larcore/CoreUtils/ServiceUtil.h"
++
++#include <set>
++#include <optional>
++
++#include "StitchingUtils.h"
++
++class ICARUSHDF5Maker : public art::EDAnalyzer {
++public:
++  explicit ICARUSHDF5Maker(fhicl::ParameterSet const& p);
++
++  ICARUSHDF5Maker(ICARUSHDF5Maker const&) = delete;
++  ICARUSHDF5Maker(ICARUSHDF5Maker&&) = delete;
++  ICARUSHDF5Maker& operator=(ICARUSHDF5Maker const&) = delete;
++  ICARUSHDF5Maker& operator=(ICARUSHDF5Maker&&) = delete;
++
++  void beginSubRun(art::SubRun const& sr) override;
++  void endSubRun(art::SubRun const& sr) override;
++  void analyze(art::Event const& e) override;
++
++private:
++
++  art::InputTag fTruthLabel;
++  art::InputTag fHitLabel;
++  art::InputTag fHitTruthLabel;
++  art::InputTag fSPLabel;
++  art::InputTag fOpHitLabel;
++  art::InputTag fOpFlashLabel;
++
++  bool fUseMap;
++  std::string fOutputName;
++
++  struct HDFDataFile {
++    hep_hpc::hdf5::File file;  ///< output HDF5 file
++
++    hep_hpc::hdf5::Ntuple<hep_hpc::hdf5::Column<int, 1>,    // event id (run, subrun, event)
++                          hep_hpc::hdf5::Column<int, 1>,    // is cc
++			  hep_hpc::hdf5::Column<int, 1>, // nu pdg
++			  hep_hpc::hdf5::Column<float, 1>,  // nu energy
++			  hep_hpc::hdf5::Column<float, 1>,  // lep energy
++			  hep_hpc::hdf5::Column<float, 1>   // nu dir (x, y, z)
++    > eventNtupleNu; ///< event ntuple with neutrino information
++
++    hep_hpc::hdf5::Ntuple<hep_hpc::hdf5::Column<int, 1>,    // event id (run, subrun, event)
++			  hep_hpc::hdf5::Column<int, 1>,    // spacepoint id
++			  hep_hpc::hdf5::Column<float, 1>,  // 3d position (x, y, z)
++			  hep_hpc::hdf5::Column<int, 1>,     // 2d hit (u, v, y)
++			  hep_hpc::hdf5::Column<float, 1>     //ChiSquared of the hit 
++    > spacePointNtuple; ///< spacepoint ntuple
++
++    hep_hpc::hdf5::Ntuple<hep_hpc::hdf5::Column<int, 1>,    // event id (run, subrun, event)
++    			  hep_hpc::hdf5::Column<int, 1>,    // hit id
++    			  hep_hpc::hdf5::Column<float, 1>,  // hit integral
++    			  hep_hpc::hdf5::Column<float, 1>,  // hit rms
++    			  hep_hpc::hdf5::Column<int, 1>,    // tpc id
++    			  hep_hpc::hdf5::Column<int, 1>,    // global plane
++    			  hep_hpc::hdf5::Column<float, 1>,  // global wire
++    			  hep_hpc::hdf5::Column<float, 1>,  // global time
++    			  hep_hpc::hdf5::Column<int, 1>,    // raw plane
++    			  hep_hpc::hdf5::Column<float, 1>,  // raw wire
++    			  hep_hpc::hdf5::Column<float, 1>,  // raw time
++    			  hep_hpc::hdf5::Column<int, 1>    //cryostat
++    > hitNtuple; ///< hit ntuple
++
++    hep_hpc::hdf5::Ntuple<hep_hpc::hdf5::Column<int, 1>,    // event id (run, subrun, event)
++    			  hep_hpc::hdf5::Column<int, 1>,    // g4 id
++    			  hep_hpc::hdf5::Column<int, 1>,    // particle type
++    			  hep_hpc::hdf5::Column<int, 1>,    // parent g4 id
++    			  hep_hpc::hdf5::Column<int, 1>,    // is from nu
++    			  hep_hpc::hdf5::Column<float, 1>,  // momentum
++    			  hep_hpc::hdf5::Column<float, 1>,  // start position (x, y, z)
++    			  hep_hpc::hdf5::Column<float, 1>,  // end position (x, y, z)
++    			  hep_hpc::hdf5::Column<std::string, 1>, // start process
++    			  hep_hpc::hdf5::Column<std::string, 1>  // end process
++    > particleNtuple; ///< particle ntuple
++
++    hep_hpc::hdf5::Ntuple<hep_hpc::hdf5::Column<int, 1>,    // event id (run, subrun, event)
++    			  hep_hpc::hdf5::Column<int, 1>,    // hit id
++    			  hep_hpc::hdf5::Column<int, 1>,    // g4 id
++    			  hep_hpc::hdf5::Column<float, 1>,  // deposited energy [ MeV ]
++    			  hep_hpc::hdf5::Column<float, 1>,  // x position
++    			  hep_hpc::hdf5::Column<float, 1>,  // y position
++    			  hep_hpc::hdf5::Column<float, 1>   // z position
++    > energyDepNtuple; ///< energy deposition ntuple
++
++    hep_hpc::hdf5::Ntuple<hep_hpc::hdf5::Column<int, 1>,    // event id (run, subrun, event)
++    			  hep_hpc::hdf5::Column<int, 1>,    // hit id
++    			  hep_hpc::hdf5::Column<int, 1>,    // hit_channel
++    			  hep_hpc::hdf5::Column<int, 1>,    // wire pos
++    			  hep_hpc::hdf5::Column<float, 1>,  // peaktime
++    			  hep_hpc::hdf5::Column<float, 1>,  // width
++    			  hep_hpc::hdf5::Column<float, 1>,  // area
++    			  hep_hpc::hdf5::Column<float, 1>,  // amplitude
++    			  hep_hpc::hdf5::Column<float, 1>,  // pe
++    			  hep_hpc::hdf5::Column<int, 1>     // usedInFlash
++    > opHitNtuple; ///< PMT hit ntuple
++
++    hep_hpc::hdf5::Ntuple<hep_hpc::hdf5::Column<int, 1>,    // event id (run, subrun, event)
++    			  hep_hpc::hdf5::Column<int, 1>,    // flash id
++                          hep_hpc::hdf5::Column<int, 1>,    // wire pos
++    			  hep_hpc::hdf5::Column<float, 1>,  // time
++    			  hep_hpc::hdf5::Column<float, 1>,  // time width
++    			  hep_hpc::hdf5::Column<float, 1>,  // Y center
++    			  hep_hpc::hdf5::Column<float, 1>,  // Y width
++    			  hep_hpc::hdf5::Column<float, 1>,  // Z center
++    			  hep_hpc::hdf5::Column<float, 1>,  // Z width
++    			  hep_hpc::hdf5::Column<float, 1>   // totalpe
++    > opFlashNtuple; ///< Flash ntuple
++
++    hep_hpc::hdf5::Ntuple<hep_hpc::hdf5::Column<int, 1>,    // event id (run, subrun, event)
++    			  hep_hpc::hdf5::Column<int, 1>,    // sumpe id
++    			  hep_hpc::hdf5::Column<int, 1>,    // flash id
++    			  hep_hpc::hdf5::Column<int, 1>,    // PMT channel
++                          hep_hpc::hdf5::Column<float, 1>,  // YZ pos
++    			  hep_hpc::hdf5::Column<float, 1>   // pe
++    > opFlashSumPENtuple; ///< Flash SumPE ntuple
++
++    static std::string makeOutputFileName(std::string const& outputName, art::SubRunID const& sr)
++    {
++      struct timeval now;
++      gettimeofday(&now, NULL);
++      std::ostringstream fileName;
++      fileName << outputName
++	       << "_r" << std::setfill('0') << std::setw(5) << sr.run()
++	       << "_s" << std::setfill('0') << std::setw(5) << sr.subRun()
++	       << "_ts" << std::setw(6) << now.tv_usec << ".h5";
++      std::cout << fileName.str() << std::endl;
++      return fileName.str();
++    }
++    
++    HDFDataFile(std::string const& outputName, art::SubRunID const& sr)
++      : file{ makeOutputFileName(outputName, sr), H5F_ACC_TRUNC }
++      , eventNtupleNu{
++      	hep_hpc::hdf5::make_ntuple({file, "event_table", 1000},
++      	hep_hpc::hdf5::make_column<int>("event_id", 3),
++        hep_hpc::hdf5::make_scalar_column<int>("is_cc"),
++        hep_hpc::hdf5::make_scalar_column<int>("nu_pdg"),    
++        hep_hpc::hdf5::make_scalar_column<float>("nu_energy"),
++        hep_hpc::hdf5::make_scalar_column<float>("lep_energy"),
++        hep_hpc::hdf5::make_column<float>("nu_dir", 3))
++        }
++      , spacePointNtuple{
++        hep_hpc::hdf5::make_ntuple({file, "spacepoint_table", 1000},
++        hep_hpc::hdf5::make_column<int>("event_id", 3),
++        hep_hpc::hdf5::make_scalar_column<int>("spacepoint_id"),
++        hep_hpc::hdf5::make_column<float>("position", 3),
++        hep_hpc::hdf5::make_column<int>("hit_id", 3),
++        hep_hpc::hdf5::make_scalar_column<float>("Chi_squared"))
++        }
++      , hitNtuple{
++        hep_hpc::hdf5::make_ntuple({file, "hit_table", 1000},
++        hep_hpc::hdf5::make_column<int>("event_id", 3),
++        hep_hpc::hdf5::make_scalar_column<int>("hit_id"),
++        hep_hpc::hdf5::make_scalar_column<float>("integral"),
++        hep_hpc::hdf5::make_scalar_column<float>("rms"),
++        hep_hpc::hdf5::make_scalar_column<int>("tpc"),
++        hep_hpc::hdf5::make_scalar_column<int>("global_plane"),
++        hep_hpc::hdf5::make_scalar_column<float>("global_wire"),
++        hep_hpc::hdf5::make_scalar_column<float>("global_time"),
++        hep_hpc::hdf5::make_scalar_column<int>("local_plane"),
++        hep_hpc::hdf5::make_scalar_column<float>("local_wire"),
++        hep_hpc::hdf5::make_scalar_column<float>("local_time"),
++      	hep_hpc::hdf5::make_scalar_column<int>("Cryostat"))
++        }
++      , particleNtuple{
++        hep_hpc::hdf5::make_ntuple({file, "particle_table", 1000},
++        hep_hpc::hdf5::make_column<int>("event_id", 3),
++        hep_hpc::hdf5::make_scalar_column<int>("g4_id"),
++        hep_hpc::hdf5::make_scalar_column<int>("type"),
++        hep_hpc::hdf5::make_scalar_column<int>("parent_id"),
++        hep_hpc::hdf5::make_scalar_column<int>("from_nu"),
++        hep_hpc::hdf5::make_scalar_column<float>("momentum"),
++        hep_hpc::hdf5::make_column<float>("start_position", 3),
++        hep_hpc::hdf5::make_column<float>("end_position", 3),
++        hep_hpc::hdf5::make_scalar_column<std::string>("start_process"),
++      	hep_hpc::hdf5::make_scalar_column<std::string>("end_process"))
++        }
++      , energyDepNtuple{
++        hep_hpc::hdf5::make_ntuple({file, "edep_table", 1000},
++        hep_hpc::hdf5::make_column<int>("event_id", 3),
++        hep_hpc::hdf5::make_scalar_column<int>("hit_id"),
++        hep_hpc::hdf5::make_scalar_column<int>("g4_id"),
++        hep_hpc::hdf5::make_scalar_column<float>("energy"),
++        hep_hpc::hdf5::make_scalar_column<float>("x_position"),
++        hep_hpc::hdf5::make_scalar_column<float>("y_position"),
++      	hep_hpc::hdf5::make_scalar_column<float>("z_position"))
++        }
++      , opHitNtuple{
++        hep_hpc::hdf5::make_ntuple({file, "ophit_table", 1000},
++        hep_hpc::hdf5::make_column<int>("event_id", 3),
++        hep_hpc::hdf5::make_scalar_column<int>("hit_id"),
++        hep_hpc::hdf5::make_scalar_column<int>("hit_channel"),
++        hep_hpc::hdf5::make_column<int>("wire_pos", 3),//3 views
++        hep_hpc::hdf5::make_scalar_column<float>("peaktime"),
++        hep_hpc::hdf5::make_scalar_column<float>("width"),
++        hep_hpc::hdf5::make_scalar_column<float>("area"),
++        hep_hpc::hdf5:: make_scalar_column<float>("amplitude"),
++        hep_hpc::hdf5::make_scalar_column<float>("pe"),
++      	hep_hpc::hdf5::make_scalar_column<int>("sumpe_id"))
++        }
++      , opFlashNtuple{
++        hep_hpc::hdf5::make_ntuple({file, "opflash_table", 1000},
++        hep_hpc::hdf5::make_column<int>("event_id", 3),
++        hep_hpc::hdf5::make_scalar_column<int>("flash_id"),
++        hep_hpc::hdf5::make_column<int>("wire_pos", 3),//3 views
++        hep_hpc::hdf5::make_scalar_column<float>("time"),
++        hep_hpc::hdf5::make_scalar_column<float>("time_width"),
++        hep_hpc::hdf5::make_scalar_column<float>("y_center"),
++        hep_hpc::hdf5::make_scalar_column<float>("y_width"),
++        hep_hpc::hdf5::make_scalar_column<float>("z_center"),
++        hep_hpc::hdf5::make_scalar_column<float>("z_width"),
++      	hep_hpc::hdf5::make_scalar_column<float>("totalpe"))
++        }
++      , opFlashSumPENtuple{
++        hep_hpc::hdf5::make_ntuple({file, "opflashsumpe_table", 1000},
++        hep_hpc::hdf5::make_column<int>("event_id", 3),
++        hep_hpc::hdf5::make_scalar_column<int>("sumpe_id"),
++        hep_hpc::hdf5::make_scalar_column<int>("flash_id"),
++        hep_hpc::hdf5::make_scalar_column<int>("pmt_channel"),
++        hep_hpc::hdf5::make_column<float>("yz_pos", 2),
++      	hep_hpc::hdf5::make_scalar_column<float>("sumpe"))
++        }
++      { }
++  };
++  std::unique_ptr<HDFDataFile> fHDFData;
++
++  int NearWire(const geo::PlaneGeo &plane, float x, float y, float z) const;
++};
++
++ICARUSHDF5Maker::ICARUSHDF5Maker(fhicl::ParameterSet const& p)
++  : EDAnalyzer{p},
++    fTruthLabel(p.get<art::InputTag>("TruthLabel")),
++    fHitLabel(  p.get<art::InputTag>("HitLabel")),
++    fHitTruthLabel(  p.get<art::InputTag>("HitTruthLabel","")),
++    fSPLabel(   p.get<art::InputTag>("SPLabel")),
++    fOpHitLabel(  p.get<art::InputTag>("OpHitLabel")),
++    fOpFlashLabel(  p.get<art::InputTag>("OpFlashLabel")),
++    fUseMap(    p.get<bool>("UseMap", false)),
++    fOutputName(p.get<std::string>("OutputName"))
++{ }
++
++void ICARUSHDF5Maker::analyze(art::Event const& e) {
++
++  const cheat::BackTrackerService* bt = fUseMap? nullptr: art::ServiceHandle<cheat::BackTrackerService>().get();
++  geo::WireReadoutGeom const& geom = art::ServiceHandle<geo::WireReadout const>()->Get();
++
++  std::set<int> g4id;
++  auto const* pi = lar::providerFrom<cheat::ParticleInventoryService>();
++  auto const clockData = art::ServiceHandle<detinfo::DetectorClocksService const>()->DataFor(e);
++  auto const detProp = art::ServiceHandle<detinfo::DetectorPropertiesService const>()->DataFor(e, clockData);
++  int run = e.id().run();
++  int subrun = e.id().subRun();
++  int event = e.id().event();
++
++  // auto tpcgeo = art::ServiceHandle<geo::Geometry const>()->TPC();
++  // std::cout << "tpc drift distance=" << tpcgeo.DriftDistance() << std::endl;
++  // std::cout << "drift velocity=" << detProp.DriftVelocity() << std::endl;
++  // std::cout << "drift time=" << tpcgeo.DriftDistance()/detProp.DriftVelocity() << " 2*dt/0.4=" << 2*tpcgeo.DriftDistance()/detProp.DriftVelocity()/clockData.TPCClock().TickPeriod() << std::endl;
++  // std::cout << "tick period=" << clockData.TPCClock().TickPeriod() << std::endl;
++  // std::cout << "tpcTime=" << clockData.TPCTime() << std::endl;
++  // std::cout << "triggerOffsetTPC=" << clockData.TriggerOffsetTPC() << std::endl;
++  // std::cout << "triggerTime=" << clockData.TriggerTime() << std::endl;
++  // std::cout << "correction=" << 2*(tpcgeo.DriftDistance()/detProp.DriftVelocity()-clockData.TriggerOffsetTPC())/clockData.TPCClock().TickPeriod() << std::endl;
++
++  // std::cout << "NEW EVENT: " << run <<"  "<< subrun << " "<< event<<std::endl;
++
++  std::array<int, 3> evtID { run, subrun, event };
++  // Fill event table
++  // Get MC truth
++  auto truthHandle = e.getValidHandle<std::vector<simb::MCTruth>>(fTruthLabel);
++  if (truthHandle->size() != 1) {
++    //avoid pile-up, which is not handled downstream
++    return;
++  }
++  simb::MCNeutrino const& nutruth = truthHandle->at(0).GetNeutrino();
++
++  auto up = nutruth.Nu().Momentum().Vect().Unit();
++  std::array<float, 3> nuMomentum {(float)up.X(),(float)up.Y(),(float)up.Z()};
++
++  fHDFData->eventNtupleNu.insert( evtID.data(),
++				  nutruth.CCNC() == simb::kCC,
++				  nutruth.Nu().PdgCode(),
++				  nutruth.Nu().E(),
++				  nutruth.Lepton().E(),
++				  nuMomentum.data()
++				  );
++
++  // for (int ip=0;ip<truthHandle->at(0).NParticles();ip++) {
++  //   std::cout << "mcp tkid=" << truthHandle->at(0).GetParticle(ip).TrackId() << " pdg=" << truthHandle->at(0).GetParticle(ip).PdgCode() 
++  // 		<< " mother=" << truthHandle->at(0).GetParticle(ip).Mother()
++  // 		<< " vtx=" << truthHandle->at(0).GetParticle(ip).Vx() << " " << truthHandle->at(0).GetParticle(ip).Vy() << " " << truthHandle->at(0).GetParticle(ip).Vz()
++  // 		<< std::endl;
++  // }
++
++  mf::LogDebug("ICARUSHDF5Maker") << "Filling event table"
++				  << "\nrun " << evtID[0] << ", subrun " << evtID[1]
++				  << ", event " << evtID[2]
++				  << "\nis cc? " << (nutruth.CCNC() == simb::kCC)
++				  << ", nu energy " << nutruth.Nu().E()
++				  << ", lepton energy " << nutruth.Lepton().E()
++				  << "\nnu momentum x " << nuMomentum[0] << ", y "
++				  << nuMomentum[1] << ", z " << nuMomentum[2];
++
++  // Get spacepoints from the event record
++  auto spListHandle = e.getValidHandle<std::vector<recob::SpacePoint>>(fSPLabel);
++  std::vector<recob::SpacePoint> const& splist = *spListHandle;
++
++  // Get hits from the event record
++  auto hitListHandle = e.getValidHandle<std::vector<recob::Hit>>(fHitLabel);
++  std::vector<art::Ptr<recob::Hit>> hitlist;
++  art::fill_ptr_vector(hitlist, hitListHandle);
++
++  // Get assocations from spacepoints to hits
++  art::FindManyP<recob::Hit> fmp(spListHandle, e, fSPLabel);
++
++  // Fill spacepoint table
++  for (size_t i = 0; i < spListHandle->size(); ++i) {
++
++    std::vector<art::Ptr<recob::Hit>> const& associatedHits = fmp.at(i);
++    if (associatedHits.size() < 3) {
++      throw art::Exception(art::errors::LogicError) << "I am certain this cannot happen... but here you go, space point with " << associatedHits.size() << " hits";
++    }
++
++    std::array<float, 3> pos {(float)splist[i].XYZ()[0],(float)splist[i].XYZ()[1],(float)splist[i].XYZ()[2]};
++
++    std::array<int, 3> hitID { -1, -1, -1 };
++    for (art::Ptr<recob::Hit> const& hit: associatedHits) {
++      int plane = util::stitchedPlane(hit->WireID());
++      //std::cout << " tpc=" << hit->WireID().TPC << " plane=" << hit->WireID().Plane
++      //          << " plane2=" << plane << " key=" <<  hit.key() << std::endl;
++      hitID[plane] = hit.key();
++    }
++    fHDFData->spacePointNtuple.insert(evtID.data(),splist[i].ID(), pos.data(), hitID.data(),splist[i].Chisq() );
++
++    mf::LogDebug("ICARUSHDF5Maker") << "Filling spacepoint table"
++				    << "\nrun " << evtID[0] << ", subrun " << evtID[1]
++				    << ", event " << evtID[2]
++				    << "\nspacepoint id " << splist[i].ID()
++				    << "\nposition x " << pos[0] << ", y " << pos[1]
++				    << ", z " << pos[2]
++				    << "\nhit ids " << hitID[0] << ", " << hitID[1]
++				    << ", " << hitID[2]
++				    << "Chi_squared "  << splist[i].Chisq();
++  } // for spacepoint
++
++  std::unique_ptr<art::FindManyP<simb::MCParticle, anab::BackTrackerHitMatchingData>> hittruth;
++  if (fUseMap) {
++    hittruth = std::unique_ptr<art::FindManyP<simb::MCParticle, anab::BackTrackerHitMatchingData> >(new art::FindManyP<simb::MCParticle, anab::BackTrackerHitMatchingData>(hitListHandle, e, fHitTruthLabel));
++  }
++
++  // Loop over hits
++  for (art::Ptr<recob::Hit> hit : hitlist) {
++
++    // Fill hit table
++    geo::WireID wireid = hit->WireID();
++    size_t plane = util::stitchedPlane(wireid);
++    double time = util::stitchedTime(wireid,hit->PeakTime());
++    size_t wire = util::stitchedWire(wireid);
++    fHDFData->hitNtuple.insert(evtID.data(),
++			       hit.key(), hit->Integral(), hit->RMS(), wireid.TPC,
++			       plane, wire, time,
++			       wireid.Plane, wireid.Wire, hit->PeakTime(),wireid.Cryostat
++			       );
++
++    mf::LogInfo("ICARUSHDF5Maker") << "Filling hit table"
++                             << "\nrun " << evtID[0] << ", subrun " << evtID[1]
++                             << ", event " << evtID[2]
++                             << "\nhit id " << hit.key() << ", integral "
++                             << hit->Integral() << ", RMS " << hit->RMS()
++                             << ", TPC " << wireid.TPC
++                             << "\nglobal plane " << plane << ", global wire "
++                             << wire << ", global time " << time
++                             << "\nlocal plane " << wireid.Plane
++                             << ", local wire " << wireid.Wire
++                             << ", local time " << hit->PeakTime()
++                             << ", Cryostat " << wireid.Cryostat;
++
++    // Fill energy deposit table
++    if (fUseMap) {
++      //not supported in icarus at the moment
++      throw art::Exception{ art::errors::UnimplementedFeature } << "The use of map is currently not supported in ICARUS";
++      /*
++      std::vector<art::Ptr<simb::MCParticle>> particle_vec = hittruth->at(hit.key());
++      std::vector<anab::BackTrackerHitMatchingData const *> match_vec = hittruth->data(hit.key());
++      //loop over particles
++      for (size_t i_p = 0; i_p < particle_vec.size(); ++i_p) {
++        g4id.insert(particle_vec[i_p]->TrackId());
++        fEnergyDepNtuple->insert(evtID.data(), hit.key(),
++                                 particle_vec[i_p]->TrackId(),
++                                 match_vec[i_p]->ideFraction,
++                                 std::numeric_limits<double>::quiet_NaN(),
++                                 std::numeric_limits<double>::quiet_NaN(),
++                                 std::numeric_limits<double>::quiet_NaN());
++        mf::LogInfo("ICARUSHDF5Maker") << "Filling energy deposit table"
++				 << "\nrun " << evtID[0] << ", subrun " << evtID[1]
++				 << ", event " << evtID[2]
++				 << "\nhit id " << hit.key() << ", g4 id "
++				 << particle_vec[i_p]->TrackId() << ", energy fraction "
++				 << match_vec[i_p]->ideFraction << ", position ("
++				 << std::nan << ", " << std::nan << ", " << std::nan << ")";;
++      } // for particle 
++      */
++    }  else {
++
++      std::vector<sim::TrackIDE> const& h_ides = bt->ChannelToTrackIDEs(clockData, hit->Channel(), hit->StartTick(), hit->EndTick());
++      for (auto const& tide : h_ides) {
++      	int tid = tide.trackID;
++	// if negative id, make sure there is a corresponding particle to look for before taking the abs.
++	// This way negative means no associated particle (a convention that can be used in the code that processes the ntuple).
++      	if (pi->TrackIdToParticle_P(abs(tid))) tid = abs(tid);
++        g4id.insert(tid);
++        fHDFData->energyDepNtuple.insert(evtID.data(),hit.key(), tid, tide.energyFrac, -1., -1., -1.);
++      }
++
++    } // if using microboone map method or not
++  } // for hit
++
++  std::unordered_map<int, simb::MCParticle const*> allIDs;
++
++  // Add invisible particles to hierarchy
++  for (int id : g4id) {
++    const simb::MCParticle* p = pi->TrackIdToParticle_P(abs(id));
++    allIDs.emplace(abs(id), p);
++    while (p && p->Mother() != 0 ) {
++      auto mid = abs(p->Mother());
++      p = pi->TrackIdToParticle_P(mid);
++      allIDs.emplace(mid, p);
++    }
++  }
++  // Loop over true particles and fill table
++  for (auto [ id, p ] : allIDs) {
++    if (!p) {
++      mf::LogError("ICARUSHDF5Maker") << "Track ID=" << id << " not tracked back to any particle.";
++      continue;
++    }
++    auto mct = pi->TrackIdToMCTruth_P(abs(id));
++    int fromNu = (mct.isAvailable() ? mct->NeutrinoSet() : 0);
++    // std::cout << "all mcp tkid=" << p->TrackId() << " pdg=" << p->PdgCode()
++    // 	      << " mother=" << p->Mother()
++    // 	      << " vtx=" << p->Vx() << " " << p->Vy() << " " << p->Vz()
++    // 	      << " mctruth=" << mct->NeutrinoSet()
++    // 	      << std::endl;
++    std::array<float, 3> particleStart { (float)p->Vx(), (float)p->Vy(), (float)p->Vz() };
++    std::array<float, 3> particleEnd { (float)p->EndX(), (float)p->EndY(), (float)p->EndZ() };
++    fHDFData->particleNtuple.insert(evtID.data(),
++				    abs(id), p->PdgCode(), p->Mother(), fromNu, (float)p->P(),
++				    particleStart.data(), particleEnd.data(),
++				    p->Process(), p->EndProcess()
++				    );
++    mf::LogDebug("ICARUSHDF5Maker") << "Filling particle table"
++				    << "\nrun " << evtID[0] << ", subrun " << evtID[1]
++				    << ", event " << evtID[2]
++				    << "\ng4 id " << abs(id) << ", pdg code "
++				    << p->PdgCode() << ", parent " << p->Mother()
++				    << ", momentum " << p->P()
++				    << "\nparticle start x " << particleStart[0]
++				    << ", y " << particleStart[1]
++				    << ", z " << particleStart[2]
++				    << "\nparticle end x " << particleEnd[0] << ", y "
++				    << particleEnd[1] << ", z " << particleEnd[2]
++				    << "\nstart process " << p->Process()
++				    << ", end process " << p->EndProcess();
++  }
++
++  // Get OpFlashs from the event record
++  art::Handle< std::vector< recob::OpFlash > > opFlashListHandle;
++  std::optional<art::FindManyP<recob::OpHit> > assocFlashHit;
++  std::vector<recob::OpFlash> const* opflashlist = nullptr;
++  if (!fOpFlashLabel.empty()) {
++    e.getByLabel(fOpFlashLabel, opFlashListHandle);
++    opflashlist = opFlashListHandle.product();
++    assocFlashHit.emplace(opFlashListHandle, e, fOpFlashLabel);
++  }
++
++  // get the flash matching the slice we selected
++  auto const& sliceOpFlashAssns = e.getProduct<art::Assns<recob::Slice, recob::OpFlash>>(fHitLabel);
++  int flkey = sliceOpFlashAssns.size()==0 ? -1: sliceOpFlashAssns.at(0).second.key();
++
++  std::vector<std::vector<int> > flashsumpepmtmap;//this has at most one element, due to the check on flkey
++
++  // Pick only the flash we care about
++  if (flkey>=0) {
++    recob::OpFlash const& opflash = opflashlist->at(flkey);
++    std::vector<float> pes;
++    for (auto pe : opflash.PEs()) pes.push_back(pe);
++    std::vector<int> nearwires;
++    double xyz[3] = {0.,opflash.YCenter(),opflash.ZCenter()};
++    for (auto const& p : geom.Iterate<geo::PlaneGeo>()) nearwires.push_back(NearWire(p,xyz[0],xyz[1],xyz[2]));
++
++    // Fill opflash table
++    fHDFData->opFlashNtuple.insert(evtID.data(),
++				   flkey,
++				   nearwires.data(),
++				   opflash.Time(),opflash.TimeWidth(),
++				   opflash.YCenter(),opflash.YWidth(),opflash.ZCenter(),opflash.ZWidth(),
++				   opflash.TotalPE()
++				   );
++    size_t count = 0;
++    std::vector<int> sumpepmtmap(art::ServiceHandle<geo::Geometry>()->NOpDets(),0);
++    for (size_t ipmt=0;ipmt<pes.size();ipmt++) {
++      if (pes[ipmt]<=0.) continue;
++      auto xyz = geom.OpDetGeoFromOpChannel(ipmt).GetCenter();
++      std::vector<float> yzpos = {float(xyz.Y()),float(xyz.Z())};
++      fHDFData->opFlashSumPENtuple.insert(evtID.data(),count,flkey,ipmt,yzpos.data(),pes[ipmt]);
++      sumpepmtmap[ipmt] = count;
++      count++;
++    }
++    flashsumpepmtmap.push_back(sumpepmtmap);
++    mf::LogDebug("ICARUSHDF5Maker") << "Filling opflash table"
++				    << "\nrun " << evtID[0] << ", subrun " << evtID[1]
++				    << ", event " << evtID[2]
++				    << "\nflash id " << flkey << ", Time " << opflash.Time()
++				    << ", TotalPE " << opflash.TotalPE()//;
++				    << "\nWireCenters size0 " << opflash.WireCenters().size()//;
++				    << "\nYCenter " << opflash.YCenter()<< " ZCenter " << opflash.ZCenter()
++				    << "\nYWidth " << opflash.YWidth()<< " ZWidth " << opflash.ZWidth()
++				    << "\nInBeamFrame " << opflash.InBeamFrame()<< " OnBeamTime " << opflash.OnBeamTime()
++				    << "\nAbsTime " << opflash.AbsTime() << " TimeWidth " << opflash.TimeWidth() << " FastToTotal " << opflash.FastToTotal();
++  }
++
++  // Get OpHits from the event record
++  std::vector< art::Ptr< recob::OpHit > > ophitlist;
++  if (!fOpHitLabel.empty()) {
++    auto opHitListHandle = e.getValidHandle< std::vector< recob::OpHit > >(fOpHitLabel);
++    art::fill_ptr_vector(ophitlist, opHitListHandle);
++  }
++
++  std::set<art::Ptr<recob::OpHit>> ophv;
++  if (flkey >= 0) {
++    auto const& flashHits = assocFlashHit->at(flkey);
++    ophv.insert(begin(flashHits), end(flashHits));
++  }
++  // Loop over ophits
++  for (art::Ptr< recob::OpHit > ophit : ophitlist) {
++    std::vector<int> nearwires;
++    auto xyz = geom.OpDetGeoFromOpChannel(ophit->OpChannel()).GetCenter();
++    for (auto const& p : geom.Iterate<geo::PlaneGeo>()) nearwires.push_back(NearWire(p,xyz.X(),xyz.Y(),xyz.Z()));
++
++    bool isInFlash = (ophv.count(ophit) > 0);
++
++    // Fill ophit table
++    fHDFData->opHitNtuple.insert(evtID.data(),ophit.key(),
++				 ophit->OpChannel(),nearwires.data(),
++				 ophit->PeakTime(),ophit->Width(),
++				 ophit->Area(),ophit->Amplitude(),ophit->PE(),
++				 (isInFlash ? flashsumpepmtmap[0][ophit->OpChannel()] : -1)
++				 );
++    mf::LogDebug("ICARUSHDF5Maker") << "\nFilling ophit table"
++				    << "\nrun " << evtID[0] << ", subrun " << evtID[1]
++				    << ", event " << evtID[2]
++				    << "\nhit id " << ophit.key() << ", channel "
++				    << ophit->OpChannel() << ", PeakTime " << ophit->PeakTime()
++				    << ", Width " << ophit->Width()
++				    << "\narea " << ophit->Area() << ", amplitude "
++				    << ophit->Amplitude() << ", PE " << ophit->PE();
++  }
++  //End optical analyzer
++
++} // function ICARUSHDF5Maker::analyze
++
++void ICARUSHDF5Maker::beginSubRun(art::SubRun const& sr) {
++  fHDFData = std::make_unique<HDFDataFile>(fOutputName, sr.id());
++}
++
++void ICARUSHDF5Maker::endSubRun(art::SubRun const& sr) {
++  fHDFData.reset();
++}
++
++int ICARUSHDF5Maker::NearWire(const geo::PlaneGeo &plane, float x, float y, float z) const
++{
++  geo::WireID wireID;
++  try {
++    wireID = plane.NearestWireID(geo::Point_t(x,y,z));
++  }
++  catch (geo::InvalidWireError const& e) {
++    if (!e.hasSuggestedWire()) throw;
++    wireID = plane.ClosestWireID(e.suggestedWireID());
++  }
++  return wireID.Wire;
++}
++
++DEFINE_ART_MODULE(ICARUSHDF5Maker)
+diff --git a/icaruscode/TPC/NuGraph/ICARUSNCCSlicesProducer_module.cc b/icaruscode/TPC/NuGraph/ICARUSNCCSlicesProducer_module.cc
+new file mode 100644
+index 00000000..5a368e8c
+--- /dev/null
++++ b/icaruscode/TPC/NuGraph/ICARUSNCCSlicesProducer_module.cc
+@@ -0,0 +1,122 @@
++/**
++ * @file icaruscode/TPC/NuGraph/ICARUSNCCSlicesProducer_module.cc
++ * @brief Implementation of `ICARUSNCCSlicesProducer` _art_ module.
++ * @author Leonardo Lena (https://github.com/leonardo-lena)
++ * @date September 9, 2025
++ */
++
++#include <memory>
++#include <map>
++#include <utility> // std::move()
++#include <vector>
++
++#include "art/Framework/Core/EDProducer.h"
++#include "art/Framework/Core/ModuleMacros.h" // for DEFINE_ART_MODULE
++#include "art/Framework/Principal/Event.h"
++#include "art/Framework/Principal/Handle.h"
++
++#include "messagefacility/MessageLogger/MessageLogger.h"
++
++#include "fhiclcpp/ParameterSet.h"
++
++#include "lardataobj/RecoBase/PFParticle.h"
++#include "lardataobj/RecoBase/PFParticleMetadata.h"
++#include "lardataobj/RecoBase/Slice.h"
++#include "lardataobj/RecoBase/SpacePoint.h"
++#include "lardataobj/RecoBase/Hit.h"
++
++#include "canvas/Persistency/Common/Ptr.h"
++#include "canvas/Utilities/InputTag.h"
++#include "canvas/Persistency/Common/FindOneP.h"
++#include "canvas/Persistency/Common/FindManyP.h"
++
++/**
++ * @class ICARUSNCCSlicesProducer
++ *
++ * Produces an std::vector<art::Ptr<recob::Slice>> whose IsPrimary PFParticle is NOT tagged as IsClearCosmic by Pandora.
++ * Also produces an Association between all recob::Slices and all recob::SpacePoints associated with atleast 3 recob::Hits in the same recob::Slice.
++ */
++class ICARUSNCCSlicesProducer : public art::EDProducer {
++
++public:
++  /**
++   * @brief Constructor
++   * @param params
++   */
++  explicit ICARUSNCCSlicesProducer(fhicl::ParameterSet const &params);
++
++  // Plugins should not be copied or assigned.
++  ICARUSNCCSlicesProducer(ICARUSNCCSlicesProducer const &) = delete;
++  ICARUSNCCSlicesProducer(ICARUSNCCSlicesProducer &&) = delete;
++  ICARUSNCCSlicesProducer &operator=(ICARUSNCCSlicesProducer const &) = delete;
++  ICARUSNCCSlicesProducer &operator=(ICARUSNCCSlicesProducer &&) = delete;
++
++private:
++  art::InputTag const fPandoraLabel;
++  art::InputTag const fClusterLabel;
++
++  void produce(art::Event &event) override;
++};
++
++ICARUSNCCSlicesProducer::ICARUSNCCSlicesProducer(fhicl::ParameterSet const &params) : EDProducer{params},
++  fPandoraLabel(params.get<art::InputTag>("PandoraLabel", "pandoraGausCryoE")),
++  fClusterLabel(params.get<art::InputTag>("ClusterLabel", "cluster3DCryoE")) {
++
++  produces<std::vector<art::Ptr<recob::Slice>>>();
++  produces<art::Assns<recob::Slice, recob::SpacePoint>>();
++}
++
++void ICARUSNCCSlicesProducer::produce(art::Event &event) {
++  auto outputSlices = std::make_unique<std::vector<art::Ptr<recob::Slice>>>();
++  auto outputSlcSpsAssns = std::make_unique<art::Assns<recob::Slice, recob::SpacePoint>>();
++  auto outputHits = std::make_unique<std::vector<art::Ptr<recob::Hit>>>();
++
++
++  // begin slice selection
++  art::ValidHandle<std::vector<recob::Slice>> slicesHandle = event.getValidHandle<std::vector<recob::Slice>>(fPandoraLabel);
++  art::ValidHandle<std::vector<recob::SpacePoint>> spacePointsHandle = event.getValidHandle<std::vector<recob::SpacePoint>>(fClusterLabel);
++  art::ValidHandle<std::vector<recob::PFParticle>> PFPHandle = event.getValidHandle<std::vector<recob::PFParticle>>(fPandoraLabel);
++  art::ValidHandle<std::vector<recob::Hit>> hitsHandle = event.getValidHandle<std::vector<recob::Hit>>(fClusterLabel);
++
++  art::FindManyP<recob::PFParticle> findMPfpFromSlice(slicesHandle, event, fPandoraLabel);
++  art::FindManyP<recob::Hit> findMHitFromSP(spacePointsHandle, event, fClusterLabel);
++  art::FindOneP<larpandoraobj::PFParticleMetadata> find1MetaFromPfp(PFPHandle, event, fPandoraLabel);
++  art::FindOneP<recob::Slice> find1SliceFromHit(hitsHandle, event, fPandoraLabel);
++
++  for (size_t sliceIdx = 0; sliceIdx < slicesHandle->size(); ++sliceIdx) {
++    const art::Ptr<recob::Slice> singleSlice(slicesHandle, sliceIdx);
++    std::vector<art::Ptr<recob::PFParticle>> PFParticlesInSlice = findMPfpFromSlice.at(sliceIdx);
++
++    for (size_t pfpIdx = 0; pfpIdx < PFParticlesInSlice.size(); pfpIdx++) {
++      art::Ptr<recob::PFParticle> singlePFParticle = PFParticlesInSlice[pfpIdx];
++      if (singlePFParticle->IsPrimary()) {
++        const art::Ptr<larpandoraobj::PFParticleMetadata> PFPMetadata = find1MetaFromPfp.at(singlePFParticle.key());
++        bool IsClearCosmic = PFPMetadata->GetPropertiesMap().count("IsClearCosmic");
++
++        if (IsClearCosmic) {continue;}
++        else { // we want only those who are NOT clear cosmic; cannot use ! operator on int
++          const art::Ptr<recob::Slice> NCCSlice(slicesHandle, sliceIdx);
++          outputSlices->emplace_back(NCCSlice);
++          break;
++        }
++      }
++    }
++  }
++
++  for (size_t spIdx = 0; spIdx < spacePointsHandle->size(); ++spIdx) {
++    const art::Ptr<recob::SpacePoint> singleSpacePoint(spacePointsHandle, spIdx);
++    const std::vector<art::Ptr<recob::Hit>> hitsAtSpacePoint = findMHitFromSP.at(spIdx);
++    if (hitsAtSpacePoint.size() < 3) {continue;}
++    auto slicekey0 = find1SliceFromHit.at(hitsAtSpacePoint[0].key()).key();
++    auto slicekey1 = find1SliceFromHit.at(hitsAtSpacePoint[1].key()).key();
++    auto slicekey2 = find1SliceFromHit.at(hitsAtSpacePoint[2].key()).key();
++    if (slicekey0 != slicekey1 || slicekey0 != slicekey2) continue;
++    outputSlcSpsAssns->addSingle(find1SliceFromHit.at(hitsAtSpacePoint[0].key()), singleSpacePoint);
++  }
++
++  event.put(std::move(outputSlices));
++  event.put(std::move(outputSlcSpsAssns));
++
++}
++
++DEFINE_ART_MODULE(ICARUSNCCSlicesProducer)
+diff --git a/icaruscode/TPC/NuGraph/ICARUSNuGraphAnalyzer_module.cc b/icaruscode/TPC/NuGraph/ICARUSNuGraphAnalyzer_module.cc
+new file mode 100644
+index 00000000..b4f29909
+--- /dev/null
++++ b/icaruscode/TPC/NuGraph/ICARUSNuGraphAnalyzer_module.cc
+@@ -0,0 +1,165 @@
++/**
++ * @file    icaruscode/TPC/NuGraph/ICARUSNuGraphAnalyzer_module.cc
++ * @brief   Analyzer to check on TPC hits and their relationship with NuGraph2 predictions.
++ * @author  Riccardo Triozzi ( triozzi@pd.infn.it ), Giuseppe Cerati ( cerati@fnal.gov )
++ * @date    September 9, 2025
++ */
++
++#include "art/Framework/Core/EDAnalyzer.h"
++#include "art/Framework/Core/ModuleMacros.h"
++#include "art/Framework/Principal/Event.h"
++#include "art/Framework/Principal/Handle.h"
++#include "art/Framework/Principal/Run.h"
++#include "art/Framework/Principal/SubRun.h"
++#include "canvas/Utilities/InputTag.h"
++#include "canvas/Persistency/Common/Assns.h"
++#include "canvas/Persistency/Common/FindOneP.h"
++#include "canvas/Persistency/Common/FindManyP.h"
++#include "fhiclcpp/ParameterSet.h"
++#include "messagefacility/MessageLogger/MessageLogger.h"
++
++#include "TTree.h"
++#include "art_root_io/TFileService.h"
++
++#include "lardata/RecoBaseProxy/ProxyBase.h"
++#include "lardataobj/AnalysisBase/MVAOutput.h"
++#include "lardataobj/RecoBase/Hit.h"
++#include "lardataobj/RecoBase/Vertex.h"
++#include "lardataobj/RecoBase/Slice.h"
++#include "lardataobj/RecoBase/Cluster.h"
++#include "lardataobj/RecoBase/PFParticle.h"
++
++class ICARUSNuGraphAnalyzer;
++
++using std::vector;
++
++class ICARUSNuGraphAnalyzer : public art::EDAnalyzer {
++public:
++  explicit ICARUSNuGraphAnalyzer(fhicl::ParameterSet const& p);
++
++  ICARUSNuGraphAnalyzer(ICARUSNuGraphAnalyzer const&) = delete;
++  ICARUSNuGraphAnalyzer(ICARUSNuGraphAnalyzer&&) = delete;
++  ICARUSNuGraphAnalyzer& operator=(ICARUSNuGraphAnalyzer const&) = delete;
++  ICARUSNuGraphAnalyzer& operator=(ICARUSNuGraphAnalyzer&&) = delete;
++
++  void analyze(art::Event const& e) override;
++
++private:
++  TTree *_treeHit, *_treeEvt;
++  int _run, _subrun, _event, _id, _wire, _plane, _tpc, _cryo;
++  float _x_filter, _MIP, _HIP, _shower, _michel, _diffuse, _time;
++  int _islc, _icluster, _ipfp;
++  float _vtx_x, _vtx_y, _vtx_z;
++  std::string fNGLabel, fSliceLabel, fPandoraLabel;
++};
++
++ICARUSNuGraphAnalyzer::ICARUSNuGraphAnalyzer(fhicl::ParameterSet const& p)
++  : EDAnalyzer{p},
++  fNGLabel{p.get<std::string>("NuGraphLabel", "NGMultiSliceCryoE")},
++  fSliceLabel{p.get<std::string>("SliceLabel", "NCCSlicesCryoE")},
++  fPandoraLabel{p.get<std::string>("PandoraLabel", "pandoraGausCryoE")}
++{
++  art::ServiceHandle<art::TFileService> tfs;
++  _treeHit = tfs->make<TTree>("NuGraphHitOutput", "NuGraphHitOutput");
++  _treeHit->Branch("run", &_run, "run/I");
++  _treeHit->Branch("subrun", &_subrun, "subrun/I");
++  _treeHit->Branch("event", &_event, "event/I");
++  _treeHit->Branch("id", &_id, "id/I");
++  _treeHit->Branch("wire", &_wire, "wire/I");
++  _treeHit->Branch("plane", &_plane, "plane/I");
++  _treeHit->Branch("tpc", &_tpc, "tpc/I");
++  _treeHit->Branch("cryo", &_cryo, "cryo/I");
++  _treeHit->Branch("x_filter", &_x_filter, "x_filter/F");
++  _treeHit->Branch("MIP", &_MIP, "MIP/F");
++  _treeHit->Branch("HIP", &_HIP, "HIP/F");
++  _treeHit->Branch("shower", &_shower, "shower/F");
++  _treeHit->Branch("michel", &_michel, "michel/F");
++  _treeHit->Branch("diffuse", &_diffuse, "diffuse/F");
++  _treeHit->Branch("time", &_time, "time/F");
++  _treeHit->Branch("islc", &_islc, "islc/I");
++  _treeHit->Branch("icluster", &_icluster, "icluster/I");
++  _treeHit->Branch("ipfp", &_ipfp, "ipfp/I");
++  _treeEvt = tfs->make<TTree>("NuGraphEventOutput", "NuGraphEventOutput");
++  _treeEvt->Branch("run", &_run, "run/I");
++  _treeEvt->Branch("subrun", &_subrun, "subrun/I");
++  _treeEvt->Branch("event", &_event, "event/I");
++  _treeEvt->Branch("vtx_x", &_vtx_x, "vtx_x/F");
++  _treeEvt->Branch("vtx_y", &_vtx_y, "vtx_y/F");
++  _treeEvt->Branch("vtx_z", &_vtx_z, "vtx_z/F");
++}
++
++void ICARUSNuGraphAnalyzer::analyze(art::Event const& e)
++{
++  // Get slices.
++  const std::vector<art::Ptr<recob::Slice>> slices = e.getProduct<vector<art::Ptr<recob::Slice>>>(fSliceLabel);
++  art::FindManyP<recob::Hit> findMHitsFromSlice(slices, e, fPandoraLabel);
++
++  // Map hits to slices.
++  std::vector<art::Ptr<recob::Hit>> allHits;
++  std::map<unsigned int, int> hitToSliceID;
++  for (size_t islc = 0; islc < slices.size(); ++islc) {
++    art::Ptr<recob::Slice> slice = slices[islc];
++    const std::vector<art::Ptr<recob::Hit>> hitsInSlice = findMHitsFromSlice.at(islc);
++    for (auto const& h : hitsInSlice) {
++      hitToSliceID[h.key()] = slice.key();
++      allHits.emplace_back(h);
++    }
++  }
++
++  art::InputTag fNGFilterLabel{fNGLabel, "filter"};
++  art::InputTag fNGSemanticLabel{fNGLabel, "semantic"};
++
++  art::FindOneP<anab::FeatureVector<1>> find1FilterFromHit(allHits, e, fNGFilterLabel);
++  art::FindOneP<anab::FeatureVector<5>> find1SemanticFromHit(allHits, e, fNGSemanticLabel);
++
++  for (size_t hitIdx = 0; hitIdx < allHits.size(); hitIdx++) {
++    art::Ptr<recob::Hit> hit = allHits[hitIdx];
++
++    // Fill event information.
++    _event  = e.event();
++    _subrun = e.subRun();
++    _run    = e.run();
++    _id     = hit.key();
++
++    // Fill slice ID.
++    auto itSlice = hitToSliceID.find(hit.key());
++    _islc = (itSlice != hitToSliceID.end()) ? itSlice->second : -1;
++
++    const art::Ptr<anab::FeatureVector<1>> filter = find1FilterFromHit.at(hitIdx);
++    const art::Ptr<anab::FeatureVector<5>> semantic = find1SemanticFromHit.at(hitIdx);
++
++    if (filter.isNull() || semantic.isNull()) {
++      std::cout << "Hit #" << hitIdx << " with key " << hit.key() << " had no valid NuGraphOutput. Skipping." << "\n";
++
++      // Fill hit description.
++      _wire  = hit->WireID().Wire;
++      _plane = hit->WireID().Plane;
++      _tpc   = hit->WireID().TPC;
++      _cryo  = hit->WireID().Cryostat;
++      _time  = hit->PeakTime();
++
++      _treeHit->Fill();
++      continue;
++    } 
++    else {
++      // Fill NuGraph predictions.
++      _x_filter = filter->at(0);
++      _MIP      = semantic->at(0);
++      _HIP      = semantic->at(1);
++      _shower   = semantic->at(2);
++      _michel   = semantic->at(3);
++      _diffuse  = semantic->at(4);
++
++      // Fill hit description.
++      _wire  = hit->WireID().Wire;
++      _plane = hit->WireID().Plane;
++      _tpc   = hit->WireID().TPC;
++      _cryo  = hit->WireID().Cryostat;
++      _time  = hit->PeakTime();
++
++      _treeHit->Fill();
++    }
++  }
++}
++
++DEFINE_ART_MODULE(ICARUSNuGraphAnalyzer)
+diff --git a/icaruscode/TPC/NuGraph/ICARUSNuGraphInference_module.cc b/icaruscode/TPC/NuGraph/ICARUSNuGraphInference_module.cc
+new file mode 100644
+index 00000000..5b76fa62
+--- /dev/null
++++ b/icaruscode/TPC/NuGraph/ICARUSNuGraphInference_module.cc
+@@ -0,0 +1,462 @@
++/**
++ * @file icaruscode/TPC/NuGraph/ICARUSNuGraphInference_module.cc
++ * @brief Implementation of `ICARUSNuGraphInference` _art_ module.
++ * @author Leonardo Lena ( https://github.com/leonardo-lena ), Giuseppe Cerati ( cerati@fnal.gov )
++ * @date October 1, 2025
++ */
++
++#include <torch/script.h>
++
++#include "art/Framework/Core/EDProducer.h"
++#include "art/Framework/Core/ModuleMacros.h"
++#include "art/Framework/Principal/Event.h"
++#include "art/Utilities/make_tool.h"
++#include "canvas/Persistency/Common/FindManyP.h"
++#include "canvas/Utilities/InputTag.h"
++#include "fhiclcpp/ParameterSet.h"
++#include "lardataobj/RecoBase/Slice.h"
++#include "messagefacility/MessageLogger/MessageLogger.h"
++
++#include <canvas/Persistency/Common/Ptr.h>
++#include <memory>
++#include <map>
++
++#include "delaunator-header-only.hpp"
++#include <vector>
++
++#include "lardataobj/RecoBase/Hit.h"
++
++#include "larrecodnn/NuGraph/Tools/DecoderToolBase.h"
++#include "larrecodnn/NuGraph/Tools/LoaderToolBase.h"
++
++using recob::Slice;
++using recob::Hit;
++using std::vector;
++
++/**
++ * @class ICARUSNuGraphInference
++ * Takes a `std::vector<art::Ptr<recob::Slice>>` from the Event on which to run NuGraph inference.
++ * The data is pre-processed using a separate `LoaderTool` and then Delauney graphs are constructed in this module.
++ * NuGraph is then run on every single slice one at the time and the outputs are then flattened together to keep backward compatibility.
++ * Two separate decoder tools, one for filter, one for semantic, are responsible for taking the NuGraph output and writing it to the Event.
++ */
++class ICARUSNuGraphInference : public art::EDProducer {
++  public:
++    explicit ICARUSNuGraphInference(const fhicl::ParameterSet& params);
++
++    ICARUSNuGraphInference(ICARUSNuGraphInference const&) = delete;
++    ICARUSNuGraphInference(ICARUSNuGraphInference&&) = delete;
++    ICARUSNuGraphInference& operator=(ICARUSNuGraphInference const&) = delete;
++    ICARUSNuGraphInference& operator=(ICARUSNuGraphInference&&) = delete;
++
++    void produce(art::Event& event) override;
++
++  private:
++    art::InputTag fSlicesLabel;
++    art::InputTag fHitLabel;
++
++    vector<std::string> planes;
++    size_t minHits;
++    bool debug;
++    vector<vector<float>> avgs; ///< Averages of the input hit features, per plane.
++    vector<vector<float>> devs; ///< Standard deviations of the input hit features, per plane.
++    vector<float> pos_norm;     ///< Normalized 2d coordinates on the plane.
++    torch::jit::script::Module model;
++    std::unique_ptr<LoaderToolBase> _loaderTool;
++
++    std::vector<std::unique_ptr<DecoderToolBase>> _decoderToolsVec; ///< Decoder tools.
++};
++
++ICARUSNuGraphInference::ICARUSNuGraphInference(const fhicl::ParameterSet& params) : art::EDProducer{params},
++  fSlicesLabel(params.get<art::InputTag>("SlicesLabel", "NCCSlicesCryoE")),
++  fHitLabel(params.get<art::InputTag>("HitLabel", "pandoraGausCryoE")),
++  planes(params.get<vector<std::string>>("planes")),
++  minHits(params.get<size_t>("minHits")),
++  debug(params.get<bool>("debug", false)),
++  pos_norm(params.get<vector<float>>("pos_norm")) {
++    for (size_t ip = 0; ip < planes.size(); ++ip) {
++      avgs.push_back(params.get<vector<float>>("avgs_" + planes[ip]));
++      devs.push_back(params.get<vector<float>>("devs_" + planes[ip]));
++    }
++
++    _loaderTool = art::make_tool<LoaderToolBase>(params.get<fhicl::ParameterSet>("LoaderTool"));
++    _loaderTool->setDebugAndPlanes(debug, planes);
++
++    // Configure and construct decoder tools.
++    auto const tool_psets = params.get<fhicl::ParameterSet>("DecoderTools");
++    for (auto const& tool_pset_labels : tool_psets.get_pset_names()) {
++      std::cout << "decoder label: " << tool_pset_labels << std::endl;
++      auto const tool_pset = tool_psets.get<fhicl::ParameterSet>(tool_pset_labels);
++      _decoderToolsVec.push_back(art::make_tool<DecoderToolBase>(tool_pset));
++      _decoderToolsVec.back()->setDebugAndPlanes(debug, planes);
++      _decoderToolsVec.back()->declareProducts(producesCollector());
++    }
++
++    cet::search_path sp("FW_SEARCH_PATH");
++    model = torch::jit::load(sp.find_file(params.get<std::string>("modelFileName")));
++  }
++
++void ICARUSNuGraphInference::produce(art::Event& event) {
++  const std::vector<art::Ptr<recob::Slice>> slices = event.getProduct<vector<art::Ptr<recob::Slice>>>(fSlicesLabel);
++
++  art::FindManyP<Hit> findMHitsFromSlice(slices, event, fHitLabel);
++
++  vector<vector<size_t>> idsmap = std::vector<std::vector<size_t>>(planes.size(), std::vector<size_t>());
++  std::map<std::string, std::vector<float>> outputsMap;
++  vector<NuGraphOutput> infer_output;
++
++  for (size_t sliceIdx = 0; sliceIdx < slices.size(); ++sliceIdx) {
++    if (debug) std::cout << "===== BEGIN SLICE " << sliceIdx+1 << "/" << slices.size() << " =====" << '\n';
++
++    vector<NuGraphInput> graphinputs;
++    vector<vector<size_t>> singleIdsmap = std::vector<std::vector<size_t>>(planes.size(), std::vector<size_t>());
++
++    vector<art::Ptr<Hit>> hitsInSlice = findMHitsFromSlice.at(sliceIdx);
++
++    _loaderTool->loadData(event, hitsInSlice, graphinputs, singleIdsmap);
++
++    bool emptyPlane = false;
++
++    for (size_t plane = 0; plane < singleIdsmap.size(); plane++) {
++      if (singleIdsmap[plane].size() <= 0) {
++        emptyPlane = true;
++      }
++    }
++
++    if (emptyPlane) {
++      if (debug) std::cout << "Slice has at least one empty plane. Skipping." << std::endl;
++      continue;
++    } else {
++      for (size_t plane = 0; plane < singleIdsmap.size(); plane++) {
++        idsmap[plane].insert(idsmap[plane].end(), singleIdsmap[plane].begin(), singleIdsmap[plane].end());
++      }
++    }
++
++    const vector<int32_t>* spids = nullptr;
++    const vector<int32_t>* hitids_u = nullptr;
++    const vector<int32_t>* hitids_v = nullptr;
++    const vector<int32_t>* hitids_y = nullptr;
++    const vector<int32_t>* hit_plane = nullptr;
++    const vector<float>* hit_time = nullptr;
++    const vector<int32_t>* hit_wire = nullptr;
++    const vector<float>* hit_integral = nullptr;
++    const vector<float>* hit_rms = nullptr;
++    for (const auto& gi : graphinputs) {
++      if (gi.input_name == "spacepoint_table_spacepoint_id")
++        spids = &gi.input_int32_vec;
++      else if (gi.input_name == "spacepoint_table_hit_id_u")
++        hitids_u = &gi.input_int32_vec;
++      else if (gi.input_name == "spacepoint_table_hit_id_v")
++        hitids_v = &gi.input_int32_vec;
++      else if (gi.input_name == "spacepoint_table_hit_id_y")
++        hitids_y = &gi.input_int32_vec;
++      else if (gi.input_name == "hit_table_local_plane")
++        hit_plane = &gi.input_int32_vec;
++      else if (gi.input_name == "hit_table_local_time")
++        hit_time = &gi.input_float_vec;
++      else if (gi.input_name == "hit_table_local_wire")
++        hit_wire = &gi.input_int32_vec;
++      else if (gi.input_name == "hit_table_integral")
++        hit_integral = &gi.input_float_vec;
++      else if (gi.input_name == "hit_table_rms")
++        hit_rms = &gi.input_float_vec;
++    }
++
++    if (debug) std::cout << "begin idsmapRev creation" << '\n';
++
++    // Reverse lookup from key to index in plane index.
++    std::map<size_t, size_t> idsmapRev;
++    for (const auto& ipv : singleIdsmap) {
++      for (size_t ih = 0; ih < ipv.size(); ih++) {
++        idsmapRev.insert(std::make_pair(ipv.at(ih), ih));
++      }
++    }
++    if (debug) std::cout << "end idsmapRev creation" << '\n';
++
++    struct Edge {
++      size_t n1;
++      size_t n2;
++      bool operator==(const Edge& other) const
++      {
++        if (this->n1 == other.n1 && this->n2 == other.n2)
++          return true;
++        else
++          return false;
++      };
++    };
++
++    // Delauney graph construction.
++    auto start_preprocess1 = std::chrono::high_resolution_clock::now();
++    vector<vector<Edge>> edge2d(planes.size(), vector<Edge>());
++    for (size_t p = 0; p < planes.size(); p++) {
++      vector<double> coords;
++      for (size_t i = 0; i < hit_plane->size(); ++i) {
++        if (size_t(hit_plane->at(i)) != p) continue;
++        coords.push_back(hit_time->at(i) * pos_norm.at(1));
++        coords.push_back(hit_wire->at(i) * pos_norm.at(0));
++        if (debug) {
++          std::cout 
++          << "Plane: " << p
++          << " Hit: " << i 
++          << " HitIdxInEdge: " << (coords.size() / 2) - 1
++          << " time_g: " << hit_time->at(i)
++          << " wire_g: " << hit_wire->at(i)
++          << '\n';
++        }
++      }
++      if (debug) std::cout << "Plane " << p << " has N hits=" << coords.size() / 2 << std::endl;
++      if (coords.size() / 2 < 3) { continue; }
++      delaunator::Delaunator d(coords);
++      if (debug) std::cout << "Found N triangles=" << d.triangles.size() / 3 << std::endl;
++      for (std::size_t i = 0; i < d.triangles.size(); i += 3) {
++        // Create edges in both directions.
++        Edge e;
++        e.n1 = d.triangles.at(i);
++        e.n2 = d.triangles.at(i+1);
++        edge2d[p].push_back(e);
++        e.n1 = d.triangles.at(i+1);
++        e.n2 = d.triangles.at(i);
++        edge2d[p].push_back(e);
++        //
++        e.n1 = d.triangles.at(i);
++        e.n2 = d.triangles.at(i+2);
++        edge2d[p].push_back(e);
++        e.n1 = d.triangles.at(i+2);
++        e.n2 = d.triangles.at(i);
++        edge2d[p].push_back(e);
++        //
++        e.n1 = d.triangles.at(i+1);
++        e.n2 = d.triangles.at(i+2);
++        edge2d[p].push_back(e);
++        e.n1 = d.triangles.at(i+2);
++        e.n2 = d.triangles.at(i+1);
++        edge2d[p].push_back(e);
++        //
++      }
++
++      // Sort and cleanup duplicate edges.
++      std::sort(edge2d[p].begin(), edge2d[p].end(), [](const auto& i, const auto& j) {
++        return (i.n1 != j.n1 ? i.n1 < j.n1 : i.n2 < j.n2);
++      });
++      if (debug) {
++        for (auto& e : edge2d[p]) {
++          std::cout << "sorted plane=" << p << " e1=" << e.n1 << " e2=" << e.n2 << std::endl;
++        }
++      }
++      edge2d.at(p).erase(std::unique(edge2d.at(p).begin(), edge2d.at(p).end()), edge2d.at(p).end());
++    }
++
++    if (debug) {
++      for (size_t p = 0; p < planes.size(); p++) {
++        for (auto& e : edge2d[p]) {
++          std::cout << " plane=" << p << " e1=" << e.n1 << " e2=" << e.n2 << std::endl;
++        }
++      }
++    }
++    auto end_preprocess1 = std::chrono::high_resolution_clock::now();
++    if (debug) std::cout << "end preprocess1" << '\n';
++    std::chrono::duration<double> elapsed_preprocess1 = end_preprocess1 - start_preprocess1;
++
++    // Nexus edges.
++    auto start_preprocess2 = std::chrono::high_resolution_clock::now();
++    vector<vector<Edge>> edge3d(planes.size(), vector<Edge>());
++    if (debug) std::cout << "Start 3d edges creation..." << '\n';
++    for (size_t i = 0; i < spids->size(); ++i) {
++      if (hitids_u->at(i) >= 0) {
++        Edge e;
++        e.n1 = idsmapRev[hitids_u->at(i)];
++        e.n2 = i;
++        edge3d[0].push_back(e);
++      }
++      if (hitids_v->at(i) >= 0) {
++        Edge e;
++        e.n1 = idsmapRev[hitids_v->at(i)];
++        e.n2 = i;
++        edge3d[1].push_back(e);
++      }
++      if (hitids_y->at(i) >= 0) {
++        Edge e;
++        e.n1 = idsmapRev[hitids_y->at(i)];
++        e.n2 = i;
++        edge3d[2].push_back(e);
++      }
++    }
++    if (debug) std::cout << "...end 3d edges creation." << '\n';
++
++    // Prepare inputs: `nodeft` stores the node (hit) features.
++    auto x = torch::Dict<std::string, torch::Tensor>();
++    auto batch = torch::Dict<std::string, torch::Tensor>();
++    for (size_t p = 0; p < planes.size(); p++) {
++      vector<float> nodeft;
++      for (size_t i = 0; i < hit_plane->size(); ++i) {
++        if (size_t(hit_plane->at(i)) != p) continue;
++        nodeft.push_back((hit_wire->at(i) * pos_norm[0] - avgs[hit_plane->at(i)][0]) /
++                         devs[hit_plane->at(i)][0]);
++        nodeft.push_back((hit_time->at(i) * pos_norm[1] - avgs[hit_plane->at(i)][1]) /
++                         devs[hit_plane->at(i)][1]);
++        nodeft.push_back((hit_integral->at(i) - avgs[hit_plane->at(i)][2]) /
++                         devs[hit_plane->at(i)][2]);
++        nodeft.push_back((hit_rms->at(i) - avgs[hit_plane->at(i)][3]) / devs[hit_plane->at(i)][3]);
++      }
++      long int dim = nodeft.size() / 4;
++      torch::Tensor ix = torch::zeros({dim, 4}, torch::dtype(torch::kFloat32));
++      if (debug) {
++        std::cout << "plane=" << p << std::endl;
++        std::cout << std::scientific;
++        for (size_t n = 0; n < nodeft.size(); n = n + 4) {
++          std::cout << nodeft[n] << " " << nodeft[n + 1] << " " << nodeft[n + 2] << " "
++                    << nodeft[n + 3] << " " << std::endl;
++        }
++      }
++      for (size_t n = 0; n < nodeft.size(); n = n + 4) {
++        ix[n / 4][0] = nodeft[n];
++        ix[n / 4][1] = nodeft[n + 1];
++        ix[n / 4][2] = nodeft[n + 2];
++        ix[n / 4][3] = nodeft[n + 3];
++      }
++      x.insert(planes[p], ix);
++      torch::Tensor ib = torch::zeros({dim}, torch::dtype(torch::kInt64));
++      batch.insert(planes[p], ib);
++    }
++
++    auto edge_index_plane = torch::Dict<std::string, torch::Tensor>();
++    for (size_t p = 0; p < planes.size(); p++) {
++      long int dim = edge2d[p].size();
++      torch::Tensor ix = torch::zeros({2, dim}, torch::dtype(torch::kInt64));
++      for (size_t n = 0; n < edge2d[p].size(); n++) {
++        ix[0][n] = int(edge2d[p][n].n1);
++        ix[1][n] = int(edge2d[p][n].n2);
++      }
++      edge_index_plane.insert(planes[p], ix);
++      if (debug) {
++        std::cout << "plane=" << p << std::endl;
++        std::cout << "2d edge size=" << edge2d[p].size() << std::endl;
++        for (size_t n = 0; n < edge2d[p].size(); n++) {
++          std::cout << edge2d[p][n].n1 << " ";
++        }
++        std::cout << std::endl;
++        for (size_t n = 0; n < edge2d[p].size(); n++) {
++          std::cout << edge2d[p][n].n2 << " ";
++        }
++        std::cout << std::endl;
++      }
++    }
++
++    auto edge_index_nexus = torch::Dict<std::string, torch::Tensor>();
++    for (size_t p = 0; p < planes.size(); p++) {
++      long int dim = edge3d[p].size();
++      torch::Tensor ix = torch::zeros({2, dim}, torch::dtype(torch::kInt64));
++      for (size_t n = 0; n < edge3d[p].size(); n++) {
++        ix[0][n] = int(edge3d[p][n].n1);
++        ix[1][n] = int(edge3d[p][n].n2);
++      }
++      edge_index_nexus.insert(planes[p], ix);
++      if (debug) {
++        std::cout << "plane=" << p << std::endl;
++        std::cout << "3d edge size=" << edge3d[p].size() << std::endl;
++        for (size_t n = 0; n < edge3d[p].size(); n++) {
++          std::cout << edge3d[p][n].n1 << " ";
++        }
++        std::cout << std::endl;
++        for (size_t n = 0; n < edge3d[p].size(); n++) {
++          std::cout << edge3d[p][n].n2 << " ";
++        }
++        std::cout << std::endl;
++      }
++    }
++
++    long int spdim = spids->size();
++    auto nexus = torch::empty({spdim, 0}, torch::dtype(torch::kFloat32));
++
++    std::vector<torch::jit::IValue> inputs;
++    inputs.push_back(x);
++    inputs.push_back(edge_index_plane);
++    inputs.push_back(edge_index_nexus);
++    inputs.push_back(nexus);
++    inputs.push_back(batch);
++
++    // Run inference
++    auto end_preprocess2 = std::chrono::high_resolution_clock::now();
++    std::chrono::duration<double> elapsed_preprocess2 = end_preprocess2 - start_preprocess2;
++    if (debug) std::cout << "FORWARD!" << std::endl;
++    auto start = std::chrono::high_resolution_clock::now();
++    c10::IValue raw_outputs;
++
++    {
++      // Use NoGradGuard to disable gradient tracking.
++      // Gradients are not needed for inference, so save some memory and computation
++      // by disabling them.
++      //
++      // This is equivalent to `with torch.no_grad():` in Python.
++      // Uses RAII, so is disabled once the guard goes out of scope.
++      torch::NoGradGuard guard;
++      raw_outputs = model.forward(inputs);
++    }
++
++    auto outputs = raw_outputs.toGenericDict();
++    auto end = std::chrono::high_resolution_clock::now();
++    std::chrono::duration<double> elapsed = end - start;
++    if (debug) {
++      std::cout << "Time taken for inference: "
++                << elapsed_preprocess1.count() + elapsed_preprocess2.count() + elapsed.count()
++                << " seconds" << std::endl;
++      std::cout << "output =" << outputs << std::endl;
++    }
++
++    for (const auto& elem1 : outputs) {
++      if (elem1.value().isTensor()) {
++        torch::Tensor tensor = elem1.value().toTensor();
++        std::vector<float> vec(tensor.data_ptr<float>(), tensor.data_ptr<float>() + tensor.numel());
++        std::string key = elem1.key().to<std::string>();
++        auto it = std::find_if(infer_output.begin(), infer_output.end(), [key](const NuGraphOutput& output){return output.output_name == key;});
++        if (it == infer_output.end()) {
++          infer_output.emplace_back(NuGraphOutput(key, vec));
++        }
++        else {
++          it->output_vec.insert(it->output_vec.end(), vec.begin(), vec.end());
++        }
++      }
++      else if (elem1.value().isGenericDict()) {
++        for (const auto& elem2 : elem1.value().toGenericDict()) {
++          torch::Tensor tensor = elem2.value().toTensor();
++          std::vector<float> vec(tensor.data_ptr<float>(), tensor.data_ptr<float>() + tensor.numel());
++          std::string key = elem1.key().to<std::string>() + "_" + elem2.key().to<std::string>();
++          auto it = std::find_if(infer_output.begin(), infer_output.end(), [key](const NuGraphOutput& output){return output.output_name == key;});
++          if (it == infer_output.end()) {
++            infer_output.emplace_back(NuGraphOutput(key, vec));
++          }
++          else {
++            it->output_vec.insert(it->output_vec.end(), vec.begin(), vec.end());
++          }
++        }
++      }
++    }
++  }
++
++  size_t idsmapEntries = 0;
++  for (std::vector<size_t> idsVec : idsmap) {
++    for (size_t idCounter = 0; idCounter < idsVec.size(); ++idCounter) {
++      idsmapEntries++;
++    }
++  }
++  if (debug) {
++    std::cout << "idsmap size: " << idsmapEntries;
++    for (const NuGraphOutput& output : infer_output) {
++      std::cout << output.output_name << " size: " << output.output_vec.size() << ' ';
++    }
++    std::cout << std::endl;
++  }
++
++  if (idsmapEntries == 0) {
++    for (size_t i = 0; i < _decoderToolsVec.size(); i++) {
++      _decoderToolsVec[i]->writeEmptyToEvent(event, idsmap);
++    }
++  } else {
++    for (size_t i = 0; i < _decoderToolsVec.size(); i++) {
++      _decoderToolsVec[i]->writeToEvent(event, idsmap, infer_output);
++    }
++  }
++  if (debug) std::cout << "INFERENCE COMPLETE" << '\n';
++}
++
++DEFINE_ART_MODULE(ICARUSNuGraphInference)
+diff --git a/icaruscode/TPC/NuGraph/ICARUSNuGraphLoader_tool.cc b/icaruscode/TPC/NuGraph/ICARUSNuGraphLoader_tool.cc
+new file mode 100644
+index 00000000..0774c17b
+--- /dev/null
++++ b/icaruscode/TPC/NuGraph/ICARUSNuGraphLoader_tool.cc
+@@ -0,0 +1,152 @@
++/**
++ * @file   icaruscode/TPC/NuGraph/ICARUSNuGraphLoader_tool.cc
++ * @author Giuseppe Cerati (cerati@fnal.gov)
++ */
++
++#include "larrecodnn/NuGraph/Tools/LoaderToolBase.h"
++
++#include "art/Utilities/ToolMacros.h"
++
++#include "messagefacility/MessageLogger/MessageLogger.h"
++#include "canvas/Persistency/Common/FindManyP.h"
++#include "canvas/Persistency/Common/Ptr.h"
++#include "canvas/Utilities/InputTag.h"
++#include "lardataobj/RecoBase/SpacePoint.h"
++#include "lardataobj/RecoBase/Hit.h"
++#include "larcoreobj/SimpleTypesAndConstants/geo_types.h" // geo::WireID
++#include <utility> // std::move()
++#include <torch/torch.h>
++
++#include "StitchingUtils.h"
++
++class ICARUSNuGraphLoader : public LoaderToolBase {
++
++/**
++ * @brief Tool to collect the inputs needed by NuGraph from ICARUS data products.
++ *
++ * Read hit and space points from the event record, and package them for usage in NuGraph. This tool is called from larrecodnn/NuGraph/NuGraphInference_module.cc.
++ * Hits are stitched so that the 4 ICARUS TPCs in a cryostat are viewed in a single time vs wire plane.
++ * Only space points with chi2<MinChiSq (currently set to 0.5) and with 3 associated hits are considered.
++ *
++ */
++
++public:
++  /**
++   *  @brief  Constructor
++   *
++   *  @param  pset
++   */
++  ICARUSNuGraphLoader(const fhicl::ParameterSet& pset);
++
++  /**
++   * @brief loadData function
++   *
++   * @param art::Event event record, list of input, idsmap
++   */
++  void loadData(art::Event& e,
++                vector<art::Ptr<recob::Hit>>& hitlist,
++                vector<NuGraphInput>& inputs,
++                vector<vector<size_t>>& idsmap) override;
++
++private:
++
++  art::InputTag const fHitInput;
++  art::InputTag const fSpsInput;
++  static constexpr double MinChiSq = 0.5; ///< Threshold to consider a space point good.
++};
++
++ICARUSNuGraphLoader::ICARUSNuGraphLoader(const fhicl::ParameterSet& p)
++  : fHitInput{p.get<art::InputTag>("hitInput")}, fSpsInput{p.get<art::InputTag>("spsInput")}
++{}
++
++void ICARUSNuGraphLoader::loadData(art::Event& e,
++                              vector<art::Ptr<recob::Hit>>& hitlist,
++                              vector<NuGraphInput>& inputs,
++                              vector<vector<size_t>>& idsmap)
++{
++  //
++  auto hitListHandle = e.getValidHandle<vector<recob::Hit>>(fHitInput);
++  art::fill_ptr_vector(hitlist, hitListHandle);
++  //
++  idsmap = std::vector<std::vector<size_t>>(planes.size(), std::vector<size_t>());
++  for (auto h : hitlist) {
++    //
++    size_t plane = util::stitchedPlane(h->WireID());
++    idsmap[plane].push_back(h.key());
++  }
++
++  vector<int32_t> hit_table_hit_id_data;
++  vector<int32_t> hit_table_local_plane_data;
++  vector<float> hit_table_local_time_data;
++  vector<int32_t> hit_table_local_wire_data;
++  vector<float> hit_table_integral_data;
++  vector<float> hit_table_rms_data;
++  vector<int32_t> spacepoint_table_spacepoint_id_data;
++  vector<int32_t> spacepoint_table_hit_id_u_data;
++  vector<int32_t> spacepoint_table_hit_id_v_data;
++  vector<int32_t> spacepoint_table_hit_id_y_data;
++
++  // hit table
++  for (auto h : hitlist) {
++
++    geo::WireID wireid = h->WireID();
++    size_t plane = util::stitchedPlane(wireid);
++    double time = util::stitchedTime(wireid,h->PeakTime());
++    size_t wire = util::stitchedWire(wireid);
++
++    hit_table_hit_id_data.push_back(h.key());
++    hit_table_local_plane_data.push_back(plane);
++    hit_table_local_time_data.push_back(time);
++    hit_table_local_wire_data.push_back(wire);
++    hit_table_integral_data.push_back(h->Integral());
++    hit_table_rms_data.push_back(h->RMS());
++  }
++  mf::LogDebug{ "ICARUSNuGraphLoader" } << "loader has nhits=" << hit_table_hit_id_data.size();
++
++  // Get spacepoints from the event record
++  art::Handle<vector<recob::SpacePoint>> spListHandle;
++  vector<art::Ptr<recob::SpacePoint>> splist;
++  if (e.getByLabel(fSpsInput, spListHandle)) { art::fill_ptr_vector(splist, spListHandle); }
++  // Get assocations from spacepoints to hits
++  vector<vector<art::Ptr<recob::Hit>>> sp2Hit(splist.size());
++  if (!splist.empty()) {
++    art::FindManyP<recob::Hit> fmp(spListHandle, e, fSpsInput);
++    for (size_t spIdx = 0; spIdx < sp2Hit.size(); ++spIdx) {
++      if (splist[spIdx]->Chisq()>MinChiSq) continue;
++      // only space points with hits on all planes are enough for NuGraph
++      if (fmp.at(spIdx).size()!=3) continue;
++      sp2Hit[spIdx] = fmp.at(spIdx);
++    }
++  }
++
++  // space point table
++  size_t spidx = 0;
++  for (size_t i = 0; i < splist.size(); ++i) {
++    if (sp2Hit[i].empty()) continue;
++    spacepoint_table_spacepoint_id_data.push_back(spidx++);
++    spacepoint_table_hit_id_u_data.push_back(-1);
++    spacepoint_table_hit_id_v_data.push_back(-1);
++    spacepoint_table_hit_id_y_data.push_back(-1);
++    for (size_t j = 0; j < sp2Hit[i].size(); ++j) {
++      //
++      size_t plane = util::stitchedPlane(sp2Hit[i][j]->WireID());
++      if (plane == 0) spacepoint_table_hit_id_u_data.back() = sp2Hit[i][j].key();
++      if (plane == 1) spacepoint_table_hit_id_v_data.back() = sp2Hit[i][j].key();
++      if (plane == 2) spacepoint_table_hit_id_y_data.back() = sp2Hit[i][j].key();
++    }
++  }
++  mf::LogDebug{ "ICARUSNuGraphLoader" }  << "loader has nsps=" << spacepoint_table_hit_id_u_data.size();
++
++  inputs.emplace_back("hit_table_hit_id", std::move(hit_table_hit_id_data));
++  inputs.emplace_back("hit_table_local_plane", std::move(hit_table_local_plane_data));
++  inputs.emplace_back("hit_table_local_time", std::move(hit_table_local_time_data));
++  inputs.emplace_back("hit_table_local_wire", std::move(hit_table_local_wire_data));
++  inputs.emplace_back("hit_table_integral", std::move(hit_table_integral_data));
++  inputs.emplace_back("hit_table_rms", std::move(hit_table_rms_data));
++
++  inputs.emplace_back("spacepoint_table_spacepoint_id", std::move(spacepoint_table_spacepoint_id_data));
++  inputs.emplace_back("spacepoint_table_hit_id_u", std::move(spacepoint_table_hit_id_u_data));
++  inputs.emplace_back("spacepoint_table_hit_id_v", std::move(spacepoint_table_hit_id_v_data));
++  inputs.emplace_back("spacepoint_table_hit_id_y", std::move(spacepoint_table_hit_id_y_data));
++}
++DEFINE_ART_CLASS_TOOL(ICARUSNuGraphLoader)
+diff --git a/icaruscode/TPC/NuGraph/ICARUSNuGraphMultiLoader_tool.cc b/icaruscode/TPC/NuGraph/ICARUSNuGraphMultiLoader_tool.cc
+new file mode 100644
+index 00000000..879c622b
+--- /dev/null
++++ b/icaruscode/TPC/NuGraph/ICARUSNuGraphMultiLoader_tool.cc
+@@ -0,0 +1,150 @@
++/**
++ * @file icaruscode/TPC/NuGraph/ICARUSNuGraphMultiLoader_tool.cc
++ * @brief Implementation of `ICARUSNuGraphMultiLoader` _art_ module.
++ * @author Leonardo Lena ( https://github.com/leonardo-lena ), Giuseppe Cerati ( cerati@fnal.gov )
++ * @date October 1, 2025
++ */
++
++#include "larrecodnn/NuGraph/Tools/LoaderToolBase.h"
++
++#include "art/Utilities/ToolMacros.h"
++
++#include "messagefacility/MessageLogger/MessageLogger.h"
++#include "canvas/Persistency/Common/FindManyP.h"
++#include "canvas/Persistency/Common/FindOneP.h"
++#include "canvas/Persistency/Common/Ptr.h"
++#include "canvas/Utilities/InputTag.h"
++#include "lardataobj/RecoBase/SpacePoint.h"
++#include "lardataobj/RecoBase/Hit.h"
++#include "lardataobj/RecoBase/Slice.h"
++#include "larcoreobj/SimpleTypesAndConstants/geo_types.h" // geo::WireID
++#include <utility> // std::move()
++#include <torch/torch.h>
++#include <vector>
++
++#include "StitchingUtils.h"
++
++class ICARUSNuGraphMultiLoader : public LoaderToolBase {
++
++/**
++ * @brief Tool to collect the inputs needed by NuGraph from ICARUS data products.
++ *
++ * Read hit and space points from the event record, and package them for usage in NuGraph.
++ * This tool is called from `icaruscode/TPC/NuGraph/ICARUSNuGraphInference_module.cc`.
++ * Hits are stitched so that the 4 ICARUS TPCs in a cryostat are viewed in a single time vs wire plane.
++ * Only space points with `chi2 < MinChiSq` (currently set to 0.5) and with `nSPHits` (currently set to 3) 
++ * associated hits are considered.
++ * The module assumes the input hits to all be from the same slice.
++ */
++
++public:
++  /**
++   *  @brief  Constructor
++   *
++   *  @param  pset
++   */
++  ICARUSNuGraphMultiLoader(const fhicl::ParameterSet& params);
++
++  /**
++   * @brief loadData function
++   *
++   * @param art::Event event record, list of input, idsmap
++   */
++  void loadData(art::Event& event,
++                vector<art::Ptr<recob::Hit>>& hitsInSlice,
++                vector<NuGraphInput>& graphinputs,
++                vector<vector<size_t>>& singleIdsmap) override;
++
++private:
++  static constexpr double minChiSq = 0.5; ///< Threshold to consider a space point good.
++  static constexpr int nSPHits = 3;       ///< Number of hits to filter `SpacePoint`s.
++  art::InputTag fPandoraLabel;
++  art::InputTag fSlicesLabel;
++  art::InputTag fClusterLabel;
++};
++
++ICARUSNuGraphMultiLoader::ICARUSNuGraphMultiLoader(const fhicl::ParameterSet& params)
++  : fPandoraLabel(params.get<art::InputTag>("PandoraLabel", "pandoraGausCryoE"))
++  , fSlicesLabel(params.get<art::InputTag>("SlicesLabel", "NCCSlicesCryoE"))
++  , fClusterLabel(params.get<art::InputTag>("ClusterLabel", "cluster3DCryoE")) {}
++
++void ICARUSNuGraphMultiLoader::loadData(art::Event& event,
++                              std::vector<art::Ptr<recob::Hit>>& hitsInSlice,
++                              std::vector<NuGraphInput>& graphinputs,
++                              std::vector<std::vector<size_t>>& singleIdsmap)
++{
++  std::vector<int32_t> hit_table_hit_id_data;
++  std::vector<int32_t> hit_table_local_plane_data;
++  std::vector<float> hit_table_local_time_data;
++  std::vector<int32_t> hit_table_local_wire_data;
++  std::vector<float> hit_table_integral_data;
++  std::vector<float> hit_table_rms_data;
++  std::vector<int32_t> spacepoint_table_spacepoint_id_data;
++  std::vector<int32_t> spacepoint_table_hit_id_u_data;
++  std::vector<int32_t> spacepoint_table_hit_id_v_data;
++  std::vector<int32_t> spacepoint_table_hit_id_y_data;
++
++  art::ValidHandle<std::vector<recob::SpacePoint>> spacePointsHandle = event.getValidHandle<std::vector<recob::SpacePoint>>(fClusterLabel);
++
++  art::FindOneP<recob::Slice> find1SliceFromHit(hitsInSlice, event, fPandoraLabel);
++  art::Ptr<recob::Slice> slice = find1SliceFromHit.at(0); // we assume the hits are all from the same slice.
++
++  art::FindManyP<recob::SpacePoint> findMSpsFromSlice(std::vector<art::Ptr<recob::Slice>>{slice}, event, fSlicesLabel);
++  std::vector<art::Ptr<recob::SpacePoint>> spacePointsInSlice = findMSpsFromSlice.at(0);
++
++  art::FindManyP<recob::Hit> findMHitsFromSps(spacePointsHandle, event, fClusterLabel);
++
++  for (const art::Ptr<recob::SpacePoint>&  spacePoint : spacePointsInSlice) {
++    std::vector<art::Ptr<recob::Hit>> hitsOfSpacePoint = findMHitsFromSps.at(spacePoint.key());
++
++    if (spacePoint->Chisq() > minChiSq || hitsOfSpacePoint.size() != nSPHits) continue;
++    spacepoint_table_spacepoint_id_data.push_back(spacePoint.key());
++
++    for (const art::Ptr<recob::Hit>& hit : hitsOfSpacePoint) {
++      geo::WireID wireId = hit->WireID();
++      size_t plane = util::stitchedPlane(wireId);
++      if (plane == 0) spacepoint_table_hit_id_u_data.push_back(hit.key());
++      if (plane == 1) spacepoint_table_hit_id_v_data.push_back(hit.key());
++      if (plane == 2) spacepoint_table_hit_id_y_data.push_back(hit.key());
++    }
++  }
++
++  std::set<std::tuple<size_t, size_t, double>> coordsSet;
++
++  for (const art::Ptr<recob::Hit>& hit : hitsInSlice) {
++    geo::WireID wireId = hit->WireID();
++    size_t plane = util::stitchedPlane(wireId);
++    double time = util::stitchedTime(wireId, hit->PeakTime());
++    size_t wire = util::stitchedWire(wireId);
++
++    auto insertReturn = coordsSet.insert(std::make_tuple(plane, wire, time));
++
++    if (insertReturn.second) {
++      hit_table_hit_id_data.push_back(hit.key());
++      hit_table_local_plane_data.push_back(plane);
++      hit_table_local_time_data.push_back(time);
++      hit_table_local_wire_data.push_back(wire);
++      hit_table_integral_data.push_back(hit->Integral());
++      hit_table_rms_data.push_back(hit->RMS());
++
++      singleIdsmap[plane].push_back(hit.key());
++    } else if (debug) {
++      std::cout << "Overlapping hit found at (plane, wire, time): (" << plane << ", " << wire << ", " << time << ").\n";
++    }
++    
++  }
++
++  graphinputs.emplace_back("hit_table_hit_id", std::move(hit_table_hit_id_data));
++  graphinputs.emplace_back("hit_table_local_plane", std::move(hit_table_local_plane_data));
++  graphinputs.emplace_back("hit_table_local_time", std::move(hit_table_local_time_data));
++  graphinputs.emplace_back("hit_table_local_wire", std::move(hit_table_local_wire_data));
++  graphinputs.emplace_back("hit_table_integral", std::move(hit_table_integral_data));
++  graphinputs.emplace_back("hit_table_rms", std::move(hit_table_rms_data));
++
++  graphinputs.emplace_back("spacepoint_table_spacepoint_id", std::move(spacepoint_table_spacepoint_id_data));
++  graphinputs.emplace_back("spacepoint_table_hit_id_u", std::move(spacepoint_table_hit_id_u_data));
++  graphinputs.emplace_back("spacepoint_table_hit_id_v", std::move(spacepoint_table_hit_id_v_data));
++  graphinputs.emplace_back("spacepoint_table_hit_id_y", std::move(spacepoint_table_hit_id_y_data));
++}
++
++DEFINE_ART_CLASS_TOOL(ICARUSNuGraphMultiLoader)
+diff --git a/icaruscode/TPC/NuGraph/ICARUSNuSliceHitsProducer_module.cc b/icaruscode/TPC/NuGraph/ICARUSNuSliceHitsProducer_module.cc
+new file mode 100644
+index 00000000..3b48cb6d
+--- /dev/null
++++ b/icaruscode/TPC/NuGraph/ICARUSNuSliceHitsProducer_module.cc
+@@ -0,0 +1,187 @@
++/**
++ * @file   icaruscode/TPC/NuGraph/ICARUSNuSliceHitsProducer_module.cc
++ * @brief  Implementation of `ICARUSNuSliceHitsProducer` _art_ module.
++ * @author Giuseppe Cerati (cerati@fnal.gov)
++ * @date   May 25, 2021
++ */
++
++#include "art/Framework/Core/EDProducer.h"
++#include "art/Framework/Core/ModuleMacros.h"
++#include "art/Framework/Principal/Event.h"
++#include "art/Framework/Principal/Handle.h"
++#include "canvas/Utilities/InputTag.h"
++#include "fhiclcpp/ParameterSet.h"
++#include "messagefacility/MessageLogger/MessageLogger.h"
++#include "canvas/Persistency/Common/FindOneP.h"
++#include "canvas/Persistency/Common/FindManyP.h"
++
++#include <algorithm> // std::find()
++#include <cmath> // std::abs()
++#include <memory>
++#include <unordered_map>
++#include <utility> // std::move()
++#include <vector>
++
++#include "lardataobj/RecoBase/OpFlash.h"
++#include "canvas/Persistency/Common/Assns.h"
++#include "art/Persistency/Common/PtrMaker.h"
++#include "lardataobj/RecoBase/Hit.h"
++#include "lardataobj/RecoBase/Slice.h"
++#include "lardataobj/RecoBase/SpacePoint.h"
++
++#include "sbnobj/Common/Reco/TPCPMTBarycenterMatch.h"
++
++class ICARUSNuSliceHitsProducer : public art::EDProducer {
++
++/**
++ * @brief Produce separate collections of hits and space point from the slice identified as most likely from the neutrino interaction.
++ *
++ * Produce separate collections of hits and space point from the slice identified as most likely from the neutrino interaction.
++ * The slice is the one identified as the one producing the trigger flash. Only space points made out of 3 hits are saved.
++ * It also produces a vector of ints, that maps the new hit collection to the original one.
++ * Optionally, it can store the association to the trigger flash used to pick the slice.
++ *
++ */
++
++public:
++  explicit ICARUSNuSliceHitsProducer(fhicl::ParameterSet const& p);
++  // The compiler-generated destructor is fine for non-base
++  // classes without bare pointers or other resource use.
++
++  // Plugins should not be copied or assigned.
++  ICARUSNuSliceHitsProducer(ICARUSNuSliceHitsProducer const&) = delete;
++  ICARUSNuSliceHitsProducer(ICARUSNuSliceHitsProducer&&) = delete;
++  ICARUSNuSliceHitsProducer& operator=(ICARUSNuSliceHitsProducer const&) = delete;
++  ICARUSNuSliceHitsProducer& operator=(ICARUSNuSliceHitsProducer&&) = delete;
++
++
++private:
++
++  // Declare member data here.
++  art::InputTag const fBaryMatchLabel;
++  art::InputTag const fSliceLabel;
++  art::InputTag const fSpsLabel;
++  bool const doFlashAssn;
++
++  // Required functions.
++  void produce(art::Event& e) override;
++
++};
++
++
++ICARUSNuSliceHitsProducer::ICARUSNuSliceHitsProducer(fhicl::ParameterSet const& p)
++  : EDProducer{p},
++  fBaryMatchLabel( p.get<art::InputTag>("BaryMatchLabel","tpcpmtbarycentermatchCryoE")),
++  fSliceLabel(p.get<art::InputTag>("SliceLabel","pandoraGausCryoE")),
++  fSpsLabel(p.get<art::InputTag>("SpsLabel","cluster3DCryoE")),
++  doFlashAssn(p.get<bool>("DoFlashAssn",false))
++  // More initializers here.
++{
++  // Call appropriate produces<>() functions here.
++  produces<std::vector<recob::Hit>>();
++  produces<std::vector<unsigned int>>();
++  produces<std::vector<recob::SpacePoint>>();
++  produces<art::Assns<recob::Hit, recob::SpacePoint>>();
++  if (doFlashAssn) produces<art::Assns<recob::Slice, recob::OpFlash>>();
++
++  // Call appropriate consumes<>() for any products to be retrieved by this module.
++}
++
++void ICARUSNuSliceHitsProducer::produce(art::Event& e)
++{
++
++  auto outputHits = std::make_unique<std::vector<recob::Hit> >();
++  auto assocSliceHitKeys = std::make_unique<std::vector<unsigned int> >();
++
++  art::PtrMaker<recob::Hit> hitPtrMaker(e);
++  art::PtrMaker<recob::SpacePoint> spsPtrMaker(e);
++
++  auto outputSpacepoints = std::make_unique<std::vector<recob::SpacePoint> >();
++  auto outputSpsHitAssns = std::make_unique<art::Assns<recob::Hit, recob::SpacePoint>>();
++  auto outputSlcFlhAssns = std::make_unique<art::Assns<recob::Slice, recob::OpFlash>>();
++
++  art::ValidHandle< std::vector< sbn::TPCPMTBarycenterMatch > > baryMatchListHandle = e.getValidHandle<std::vector<sbn::TPCPMTBarycenterMatch> >(fBaryMatchLabel);
++  art::FindOneP<recob::Slice> msl(baryMatchListHandle, e, fBaryMatchLabel);
++  art::FindOneP<recob::OpFlash> mfl(baryMatchListHandle, e, fBaryMatchLabel);
++  float minRad = 99999.;
++  art::Ptr<recob::Slice> triggeringSlice;
++  art::Ptr<recob::OpFlash> triggeringFlash;
++  for (size_t ibm=0; ibm<baryMatchListHandle->size(); ++ibm) {
++    sbn::TPCPMTBarycenterMatch const& bm = (*baryMatchListHandle)[ibm];
++    // require the radius to be set (i.e. that there is a best match) and to match the one of the trigger within an arbitrarily small enough margin
++    if (bm.radius_Trigger<=0 || std::abs(bm.radius-bm.radius_Trigger)>=0.00001) continue;
++    art::Ptr<recob::Slice> const& slice = msl.at(ibm);
++    art::Ptr<recob::OpFlash> const& flash = mfl.at(ibm);
++    if (!slice || !flash) throw std::logic_error("Unexpected missing flash or slice in barycenter matching associations");
++    mf::LogTrace{ "ICARUSNuSliceHitsProducer" }
++      << "ibm=" << ibm << " radius=" << bm.radius << " radius_Trigger=" << bm.radius_Trigger << " flashTime=" << bm.flashTime
++      << " slkey=" << msl.at(ibm).key() << " center=" << bm.chargeCenter
++      << " flkey=" << mfl.at(ibm).key() << " center=" << bm.flashCenter;
++    if (bm.radius_Trigger<minRad) {
++      minRad = bm.radius_Trigger;
++      triggeringSlice = slice;
++      triggeringFlash = flash;
++    }
++  }
++  mf::LogTrace{ "ICARUSNuSliceHitsProducer" } << "keys: slice=" << triggeringSlice.key() << " flash=" << triggeringFlash.key();
++
++  if (doFlashAssn) {
++    if (triggeringSlice && triggeringFlash) {
++      outputSlcFlhAssns->addSingle(triggeringSlice,triggeringFlash);
++    }
++  }
++
++  art::ValidHandle<std::vector<recob::Slice> > inputSlice = e.getValidHandle<std::vector<recob::Slice> >(fSliceLabel);
++  art::FindManyP<recob::Hit> assocSliceHit(inputSlice, e, fSliceLabel);
++
++  if (triggeringSlice) {
++    mf::LogTrace{ "ICARUSNuSliceHitsProducer" } << "slice hits=" << assocSliceHit.at(triggeringSlice.key()).size();
++    auto const& hits = assocSliceHit.at(triggeringSlice.key());
++    std::unordered_map<size_t,size_t> keyIdxMap;
++    for (size_t ih=0; ih<hits.size(); ih++) {
++      assocSliceHitKeys->push_back(hits[ih].key());
++      keyIdxMap.insert({hits[ih].key(), ih});
++    }
++    std::sort(begin(*assocSliceHitKeys), end(*assocSliceHitKeys));
++    outputHits->reserve(assocSliceHitKeys->size());
++    for (auto const& key: *assocSliceHitKeys) outputHits->push_back(*hits[keyIdxMap.at(key)]);
++  }
++
++  // Get spacepoints from the event record
++  auto splist = e.getValidHandle<std::vector<recob::SpacePoint>>(fSpsLabel);
++  size_t countsps = 0;
++  // Get assocations from spacepoints to hits
++  art::FindManyP<recob::Hit> spacePointToHits(splist, e, fSpsLabel);
++  for (size_t spIdx = 0; spIdx < splist->size(); ++spIdx) {
++    auto const& assochits = spacePointToHits.at(spIdx);
++    // Consider only space points with hits associated on all planes. This is enough for NuGraph.
++    if (assochits.size()<3) continue;
++    //if (splist[spIdx]->Chisq()>0.5) continue;
++    //
++    std::vector<size_t> hitpos;
++    for (size_t j = 0; j < assochits.size(); ++j) {
++      auto pos = std::lower_bound(assocSliceHitKeys->begin(),assocSliceHitKeys->end(),assochits[j].key());
++      if ( (pos == assocSliceHitKeys->end()) || (*pos != assochits[j].key()) ) break;
++      hitpos.push_back(pos-assocSliceHitKeys->begin());
++    }
++    if (hitpos.size()<3) continue;
++    outputSpacepoints->emplace_back((*splist)[spIdx]);
++    //
++    const art::Ptr<recob::SpacePoint> sps = spsPtrMaker(outputSpacepoints->size()-1);
++    for (size_t j = 0; j < hitpos.size(); ++j) {
++      const art::Ptr<recob::Hit> ahp = hitPtrMaker(hitpos[j]);
++      outputSpsHitAssns->addSingle(ahp,sps);
++    }
++    countsps++;
++  } // for spacepoint
++  mf::LogTrace{ "ICARUSNuSliceHitsProducer" } << "sps count=" << countsps;
++
++  e.put(std::move(outputHits));
++  e.put(std::move(assocSliceHitKeys));
++  e.put(std::move(outputSpacepoints));
++  e.put(std::move(outputSpsHitAssns));
++  if (doFlashAssn) e.put(std::move(outputSlcFlhAssns));
++
++}
++
++DEFINE_ART_MODULE(ICARUSNuSliceHitsProducer)
+diff --git a/icaruscode/TPC/NuGraph/ICARUSPandoraHitDumpAnalyzer_module.cc b/icaruscode/TPC/NuGraph/ICARUSPandoraHitDumpAnalyzer_module.cc
+new file mode 100644
+index 00000000..37944d9f
+--- /dev/null
++++ b/icaruscode/TPC/NuGraph/ICARUSPandoraHitDumpAnalyzer_module.cc
+@@ -0,0 +1,226 @@
++/**
++ * @file    icaruscode/TPC/NuGraph/ICARUSPandoraHitDumpAnalyzer_module.cc
++ * @brief   Analyzer to check on TPC hits and their relationship with the Pandora reconstruction.
++ * @author  Riccardo Triozzi ( triozzi@pd.infn.it )
++ * @date    September 9, 2025
++ */
++
++#include "art/Framework/Core/EDAnalyzer.h"
++#include "art/Framework/Core/ModuleMacros.h"
++#include "art/Framework/Principal/Event.h"
++#include "art/Framework/Principal/Handle.h"
++#include "art/Framework/Principal/Run.h"
++#include "art/Framework/Principal/SubRun.h"
++#include "canvas/Utilities/InputTag.h"
++#include "canvas/Persistency/Common/Assns.h"
++#include "canvas/Persistency/Common/FindOneP.h"
++#include "canvas/Persistency/Common/FindManyP.h"
++#include "fhiclcpp/ParameterSet.h"
++#include "messagefacility/MessageLogger/MessageLogger.h"
++
++#include "TTree.h"
++#include "art_root_io/TFileService.h"
++
++#include "lardata/RecoBaseProxy/ProxyBase.h"
++#include "lardataobj/AnalysisBase/MVAOutput.h"
++#include "lardataobj/RecoBase/Hit.h"
++#include "lardataobj/RecoBase/Vertex.h"
++#include "lardataobj/RecoBase/Slice.h"
++#include "lardataobj/RecoBase/Cluster.h"
++#include "lardataobj/RecoBase/PFParticle.h"
++#include "lardataobj/RecoBase/PFParticleMetadata.h"
++
++class ICARUSPandoraHitDumpAnalyzer;
++
++using std::vector;
++
++class ICARUSPandoraHitDumpAnalyzer : public art::EDAnalyzer {
++public:
++  explicit ICARUSPandoraHitDumpAnalyzer(fhicl::ParameterSet const& p);
++
++  ICARUSPandoraHitDumpAnalyzer(ICARUSPandoraHitDumpAnalyzer const&) = delete;
++  ICARUSPandoraHitDumpAnalyzer(ICARUSPandoraHitDumpAnalyzer&&) = delete;
++  ICARUSPandoraHitDumpAnalyzer& operator=(ICARUSPandoraHitDumpAnalyzer const&) = delete;
++  ICARUSPandoraHitDumpAnalyzer& operator=(ICARUSPandoraHitDumpAnalyzer&&) = delete;
++
++  void analyze(art::Event const& e) override;
++
++private:
++  TTree *_treeHit, *_treeEvt;
++
++  std::string fHitLabel, fPandoraLabel;
++
++  int _run, _subrun, _event, _id, _wire, _plane, _tpc, _cryo; ///< Hit information.
++  float _x_filter, _MIP, _HIP, _shower, _michel, _diffuse, _time; ///< NuGraph2 information.
++  int _islc, _icluster, _ipfp, _pdg_hit; ///< Pandora information.
++  float _ipfpslc, _vtx_x, _vtx_y, _vtx_z, _pdg; ///< More particle information.
++};
++
++ICARUSPandoraHitDumpAnalyzer::ICARUSPandoraHitDumpAnalyzer(fhicl::ParameterSet const& p)
++  : EDAnalyzer{p}, 
++  fHitLabel{p.get<std::string>("HitLabel", "cluster3DCryoE")},
++  fPandoraLabel{p.get<std::string>("PandoraLabel", "pandoraGausCryoE")}
++{
++  art::ServiceHandle<art::TFileService> tfs;
++  _treeHit = tfs->make<TTree>("PandoraHitOutput", "PandoraHitOutput");
++  _treeHit->Branch("run", &_run, "run/I");
++  _treeHit->Branch("subrun", &_subrun, "subrun/I");
++  _treeHit->Branch("event", &_event, "event/I");
++  _treeHit->Branch("id", &_id, "id/I");
++  _treeHit->Branch("wire", &_wire, "wire/I");
++  _treeHit->Branch("plane", &_plane, "plane/I");
++  _treeHit->Branch("tpc", &_tpc, "tpc/I");
++  _treeHit->Branch("cryo", &_cryo, "cryo/I");
++  _treeHit->Branch("x_filter", &_x_filter, "x_filter/F");
++  _treeHit->Branch("MIP", &_MIP, "MIP/F");
++  _treeHit->Branch("HIP", &_HIP, "HIP/F");
++  _treeHit->Branch("shower", &_shower, "shower/F");
++  _treeHit->Branch("michel", &_michel, "michel/F");
++  _treeHit->Branch("diffuse", &_diffuse, "diffuse/F");
++  _treeHit->Branch("time", &_time, "time/F");
++  _treeHit->Branch("islc", &_islc, "islc/I");
++  _treeHit->Branch("icluster", &_icluster, "icluster/I");    
++  _treeHit->Branch("ipfp", &_ipfp, "ipfp/I");    
++  _treeHit->Branch("pfppdg", &_pdg_hit, "pfppdg/I");    
++  _treeEvt = tfs->make<TTree>("PandoraPFPOutput", "PandoraPFPOutput");
++  _treeEvt->Branch("run", &_run, "run/I");
++  _treeEvt->Branch("subrun", &_subrun, "subrun/I");
++  _treeEvt->Branch("event", &_event, "event/I");
++  _treeEvt->Branch("ipfpslc", &_ipfpslc, "ipfpslc/I");
++  _treeEvt->Branch("vtx_x", &_vtx_x, "vtx_x/F");
++  _treeEvt->Branch("vtx_y", &_vtx_y, "vtx_y/F");
++  _treeEvt->Branch("vtx_z", &_vtx_z, "vtx_z/F");
++  _treeEvt->Branch("pdg", &_pdg, "pdg/I");
++}
++
++void ICARUSPandoraHitDumpAnalyzer::analyze(art::Event const& e)
++{
++  art::Handle<std::vector<recob::Hit>> hitListHandle;
++  e.getByLabel(fHitLabel, hitListHandle);
++  std::cout << hitListHandle->size() << std::endl;
++
++  // Map hits to Pandora slices.
++  art::Handle<std::vector<recob::Slice>> sliceHandle;
++  e.getByLabel(fPandoraLabel, sliceHandle);
++  art::FindManyP<recob::Hit> sliceAssoc(sliceHandle, e, fPandoraLabel);
++
++  std::map<unsigned int, int> hitToSliceID;
++  for (size_t islc = 0; islc < sliceHandle->size(); ++islc) {
++    art::Ptr<recob::Slice> slice(sliceHandle, islc);
++    auto const& hitsInSlice = sliceAssoc.at(islc);
++    for (auto const& h : hitsInSlice) 
++      hitToSliceID[h.key()] = slice->ID();
++  }
++
++  // Map hits to Pandora clusters.
++  art::Handle<std::vector<recob::Cluster>> clusterHandle;
++  e.getByLabel(fPandoraLabel, clusterHandle);
++  art::FindManyP<recob::Hit> clusterAssoc(clusterHandle, e, fPandoraLabel);
++
++  std::map<unsigned int, int> hitToClusterID;
++  for (size_t iclus = 0; iclus < clusterHandle->size(); ++iclus) {
++    art::Ptr<recob::Cluster> cluster(clusterHandle, iclus);
++    auto const& hitsInCluster = clusterAssoc.at(iclus);
++    for (auto const& h : hitsInCluster) 
++      // hitToClusterID[h.key()] = cluster->ID();
++      hitToClusterID[h.key()] = cluster.key();
++  }
++
++  // Get Pandora PFPs.
++  art::Handle<std::vector<recob::PFParticle>> pfpHandle;
++  e.getByLabel(fPandoraLabel, pfpHandle);
++  art::FindManyP<recob::PFParticle> pfpAssoc(clusterHandle, e, fPandoraLabel);
++  art::FindManyP<larpandoraobj::PFParticleMetadata> pfpMetadataAssoc(pfpHandle, e, fPandoraLabel);
++
++  std::map<unsigned int, int> pfpIDMap;
++  for (size_t ipfp = 0; ipfp < pfpHandle->size(); ++ipfp) {
++    art::Ptr<recob::PFParticle> pfp(pfpHandle, ipfp);
++    pfpIDMap[pfp.key()] = ipfp; 
++  }
++
++  // Map clusters to Pandora PFPs.
++  std::map<unsigned int, int> clusterToPFPID;
++
++  for (size_t iclus = 0; iclus < clusterHandle->size(); ++iclus) {
++    art::Ptr<recob::Cluster> cluster(clusterHandle, iclus);
++    auto const& pfps = pfpAssoc.at(iclus);
++
++    auto it = pfpIDMap.find(pfps.front().key());
++    if (it != pfpIDMap.end()) 
++      clusterToPFPID[cluster.key()] = it->second;
++  }
++
++  // Fill hit tree.
++  for (size_t ihit = 0; ihit < hitListHandle->size(); ihit++) {
++    art::Ptr<recob::Hit> hit(hitListHandle, ihit);
++
++    // Fill event information.
++    _event  = e.event();
++    _subrun = e.subRun();
++    _run    = e.run();
++    _id     = hit.key();
++
++    // Fill hit description.
++    _wire  = hit->WireID().Wire;
++    _plane = hit->WireID().Plane;
++    _tpc   = hit->WireID().TPC;
++    _cryo  = hit->WireID().Cryostat;
++    _time  = hit->PeakTime();
++
++    // Fill with the corresponding Pandora information.
++    auto itSlice = hitToSliceID.find(hit.key());
++    _islc = (itSlice != hitToSliceID.end()) ? itSlice->second : -1;
++    auto itCluster = hitToClusterID.find(hit.key());
++    _icluster = (itCluster != hitToClusterID.end()) ? itCluster->second : -1;
++    _ipfp = -1;
++    _pdg_hit = -1;
++
++    if (_icluster > -1) {
++      auto itPFP = clusterToPFPID.find(_icluster);
++      if (itPFP != clusterToPFPID.end()) {
++        _ipfp = itPFP->second; 
++        if (_ipfp > -1 && _ipfp < (int)pfpHandle->size()) {
++          art::Ptr<recob::PFParticle> pfp(pfpHandle, _ipfp);
++          _pdg_hit = pfp->PdgCode();
++        }
++      }
++    }
++
++    _treeHit->Fill();
++  }
++
++  art::FindManyP<recob::Slice> slcToPFPAssoc(pfpHandle, e, fPandoraLabel);
++  art::FindManyP<recob::Vertex> vtxToPFPAssoc(pfpHandle, e, fPandoraLabel);
++
++  // Fill PFP tree.
++  for (size_t ipfp = 0; ipfp < pfpHandle->size(); ipfp++) {
++    art::Ptr<recob::PFParticle> pfp(pfpHandle, ipfp);
++
++    // Fill slice index.
++    std::vector<art::Ptr<recob::Slice>> slcList = slcToPFPAssoc.at(pfp.key());
++    if (slcList.size()) {
++      art::Ptr<recob::Slice> slc = slcList[0];
++      _ipfpslc = slc->ID();
++    }
++    
++    // Fill vertex information.
++    std::vector<art::Ptr<recob::Vertex>> vtxList = vtxToPFPAssoc.at(pfp.key());
++    if (vtxList.size()) {
++      art::Ptr<recob::Vertex> vtx = vtxList[0];
++      _vtx_x = vtx->position().X();
++      _vtx_y = vtx->position().Y();
++      _vtx_z = vtx->position().Z();
++    }
++    else {
++      _vtx_x = _vtx_y = _vtx_z = -1.;
++    }
++
++    // Fill truth information.
++    _pdg = pfp->PdgCode();
++
++    _treeEvt->Fill();
++    
++  }
++}
++
++DEFINE_ART_MODULE(ICARUSPandoraHitDumpAnalyzer)
+\ No newline at end of file
+diff --git a/icaruscode/TPC/NuGraph/ICARUSTrueNuSliceHitsProducer_module.cc b/icaruscode/TPC/NuGraph/ICARUSTrueNuSliceHitsProducer_module.cc
+new file mode 100644
+index 00000000..1b85b3db
+--- /dev/null
++++ b/icaruscode/TPC/NuGraph/ICARUSTrueNuSliceHitsProducer_module.cc
+@@ -0,0 +1,210 @@
++/**
++ * @file   icaruscode/TPC/NuGraph/ICARUSTrueNuSliceHitsProducer_module.cc
++ * @brief  Implementation of `ICARUSTrueNuSliceHitsProducer` module
++ * @author Giuseppe Cerati (cerati@fnal.gov)
++ */
++
++#include "art/Framework/Core/EDProducer.h"
++#include "art/Framework/Core/ModuleMacros.h"
++#include "art/Framework/Principal/Event.h"
++#include "art/Framework/Principal/Handle.h"
++#include "canvas/Utilities/InputTag.h"
++#include "fhiclcpp/ParameterSet.h"
++#include "messagefacility/MessageLogger/MessageLogger.h"
++#include "canvas/Persistency/Common/FindManyP.h"
++
++#include <algorithm> // std::find()
++#include <cmath> // std::abs()
++#include <memory>
++#include <unordered_map>
++#include <utility> // std::move()
++#include <vector>
++
++#include "lardataobj/RecoBase/OpFlash.h"
++#include "canvas/Persistency/Common/Assns.h"
++#include "art/Persistency/Common/PtrMaker.h"
++#include "lardataobj/RecoBase/Hit.h"
++#include "lardataobj/RecoBase/Slice.h"
++#include "lardataobj/RecoBase/PFParticle.h"
++#include "lardataobj/RecoBase/SpacePoint.h"
++
++#include "sbnobj/Common/Reco/TPCPMTBarycenterMatch.h"
++#include "larsim/MCCheater/ParticleInventoryService.h"
++#include "larsim/MCCheater/BackTrackerService.h"
++#include "lardata/DetectorInfoServices/DetectorClocksService.h"
++#include "larcore/CoreUtils/ServiceUtil.h"
++
++class ICARUSTrueNuSliceHitsProducer : public art::EDProducer {
++
++/**
++ * @brief Produce separate collections of hits and space point from the slice with most true hits from the neutrino interaction.
++ *
++ * Produce separate collections of hits and space point from the slice with most true hits from the neutrino interaction.
++ * It also produces a vector of ints, that maps the new hit collection to the original one.
++ * Optionally, it can store the association to the trigger flash matched to the slice.
++ *
++ */
++
++public:
++  explicit ICARUSTrueNuSliceHitsProducer(fhicl::ParameterSet const& p);
++  // The compiler-generated destructor is fine for non-base
++  // classes without bare pointers or other resource use.
++
++  // Plugins should not be copied or assigned.
++  ICARUSTrueNuSliceHitsProducer(ICARUSTrueNuSliceHitsProducer const&) = delete;
++  ICARUSTrueNuSliceHitsProducer(ICARUSTrueNuSliceHitsProducer&&) = delete;
++  ICARUSTrueNuSliceHitsProducer& operator=(ICARUSTrueNuSliceHitsProducer const&) = delete;
++  ICARUSTrueNuSliceHitsProducer& operator=(ICARUSTrueNuSliceHitsProducer&&) = delete;
++
++
++private:
++
++  // Declare member data here.
++  art::InputTag const fBaryMatchLabel;
++  art::InputTag const fSliceLabel;
++  art::InputTag const fSpsLabel;
++  bool const doFlashAssn;
++
++  // Required functions.
++  void produce(art::Event& e) override;
++
++};
++
++
++ICARUSTrueNuSliceHitsProducer::ICARUSTrueNuSliceHitsProducer(fhicl::ParameterSet const& p)
++  : EDProducer{p},
++  fBaryMatchLabel( p.get<art::InputTag>("BaryMatchLabel") ),
++  fSliceLabel(p.get<art::InputTag>("SliceLabel")),
++  fSpsLabel(p.get<art::InputTag>("SpsLabel")),
++  doFlashAssn(p.get<bool>("DoFlashAssn",false))
++  // More initializers here.
++{
++  // Call appropriate produces<>() functions here.
++  produces<std::vector<recob::Hit>>();
++  produces<std::vector<unsigned int>>();
++  produces<std::vector<recob::SpacePoint>>();
++  produces<art::Assns<recob::Hit, recob::SpacePoint>>();
++  if (doFlashAssn) produces<art::Assns<recob::Slice, recob::OpFlash>>();
++
++  // Call appropriate consumes<>() for any products to be retrieved by this module.
++}
++
++void ICARUSTrueNuSliceHitsProducer::produce(art::Event& e)
++{
++
++  auto outputHits = std::make_unique<std::vector<recob::Hit> >();
++  auto assocSliceHitKeys = std::make_unique<std::vector<unsigned int> >();
++
++  art::PtrMaker<recob::Hit> hitPtrMaker(e);
++  art::PtrMaker<recob::SpacePoint> spsPtrMaker(e);
++
++  auto outputSpacepoints = std::make_unique<std::vector<recob::SpacePoint> >();
++  auto outputSpsHitAssns = std::make_unique<art::Assns<recob::Hit, recob::SpacePoint>>();
++  auto outputSlcFlhAssns = std::make_unique<art::Assns<recob::Slice, recob::OpFlash>>();
++
++  auto const* pi = lar::providerFrom<cheat::ParticleInventoryService>();
++  auto const* bt = lar::providerFrom<cheat::BackTrackerService>();
++  auto const clockData = art::ServiceHandle<detinfo::DetectorClocksService const>()->DataFor(e);
++
++  art::ValidHandle<std::vector<recob::Slice> > inputSlice = e.getValidHandle<std::vector<recob::Slice> >(fSliceLabel);
++  art::FindManyP<recob::Hit> assocSliceHit(inputSlice, e, fSliceLabel);
++  int slkey = -1;
++  int maxCnt = 0;
++  // find the slice with the largest number of hits contributed by neutrino interactions
++  for (size_t sk=0; sk<inputSlice->size(); sk++) {
++    int slhcnt = 0;
++    for (auto hit : assocSliceHit.at(sk)) {
++      std::vector<sim::TrackIDE> const& h_ides = bt->ChannelToTrackIDEs(clockData, hit->Channel(), hit->StartTick(), hit->EndTick());
++      for (auto const& tide : h_ides) {
++      	int tid = tide.trackID;
++	auto mct = pi->TrackIdToMCTruth_P(abs(tid));
++	bool fromNu = mct.isAvailable() && mct->NeutrinoSet();
++	if (fromNu) {
++	  slhcnt++;
++	  break;
++	}
++      }
++    }
++    if (slhcnt>maxCnt) {
++      slkey = sk;
++      maxCnt = slhcnt;
++    }
++  }
++  mf::LogTrace{ "ICARUSTrueNuSliceHitsProducer" } << "keys: slice=" << slkey;
++
++  if (slkey>=0) {
++    auto const& hits = assocSliceHit.at(slkey);
++    mf::LogTrace{ "ICARUSTrueNuSliceHitsProducer" } << "slice hits=" << hits.size();
++    std::unordered_map<size_t,size_t> keyIdxMap;
++    for (size_t ih=0; ih<hits.size(); ih++) {
++      assocSliceHitKeys->push_back(hits[ih].key());
++      keyIdxMap.insert({hits[ih].key(), ih});
++    }
++    std::sort(begin(*assocSliceHitKeys), end(*assocSliceHitKeys));
++    outputHits->reserve(assocSliceHitKeys->size());
++    for (auto const& key: *assocSliceHitKeys) outputHits->push_back(*hits[keyIdxMap.at(key)]);
++  }
++
++  // Get spacepoints from the event record
++  auto splist = e.getValidHandle<std::vector<recob::SpacePoint>>(fSpsLabel);
++  size_t countsps = 0;
++  // Get assocations from spacepoints to hits
++  art::FindManyP<recob::Hit> spacePointToHits(splist, e, fSpsLabel);
++  for (size_t spIdx = 0; spIdx < splist->size(); ++spIdx) {
++    auto const& assochits = spacePointToHits.at(spIdx);
++    // Consider only space points with hits associated on all planes. This is enough for NuGraph.
++    if (assochits.size()<3) continue;
++    //
++    std::vector<size_t> hitpos;
++    for (size_t j = 0; j < assochits.size(); ++j) {
++      auto pos = std::lower_bound(assocSliceHitKeys->begin(),assocSliceHitKeys->end(),assochits[j].key());
++      if ( (pos == assocSliceHitKeys->end()) || (*pos != assochits[j].key()) ) break;
++      hitpos.push_back(pos-assocSliceHitKeys->begin());
++    }
++    if (hitpos.size()<3) continue;
++    outputSpacepoints->emplace_back((*splist)[spIdx]);
++    //
++    const art::Ptr<recob::SpacePoint> sps = spsPtrMaker(outputSpacepoints->size()-1);
++    for (size_t j = 0; j < hitpos.size(); ++j) {
++      const art::Ptr<recob::Hit> ahp = hitPtrMaker(hitpos[j]);
++      outputSpsHitAssns->addSingle(ahp,sps);
++    }
++    countsps++;
++  } // for spacepoint
++  mf::LogTrace{ "ICARUSTrueNuSliceHitsProducer" } << "sps count=" << countsps;
++
++  art::ValidHandle< std::vector< sbn::TPCPMTBarycenterMatch > > baryMatchListHandle = e.getValidHandle<std::vector<sbn::TPCPMTBarycenterMatch> >(fBaryMatchLabel);
++  art::FindManyP<recob::Slice> msl(baryMatchListHandle, e, fBaryMatchLabel);
++  art::FindManyP<recob::OpFlash> mfl(baryMatchListHandle, e, fBaryMatchLabel);
++  float minRad = 99999.;
++  int mbkey = -1;
++  for (size_t ibm=0; ibm<baryMatchListHandle->size(); ++ibm) {
++    art::Ptr<sbn::TPCPMTBarycenterMatch> bm(baryMatchListHandle,ibm);
++    if (int(msl.at(ibm).at(0).key())!=slkey) continue;
++    if (mfl.at(ibm).size()>0) {
++      mf::LogTrace{ "ICARUSTrueNuSliceHitsProducer" } << "ibm=" << ibm << " radius=" << bm->radius << " radius_Trigger=" << bm->radius_Trigger << " flashTime=" << bm->flashTime
++						  << " slkey=" << msl.at(ibm).at(0).key() << " center=" << bm->chargeCenter
++						  << " flkey=" << mfl.at(ibm).at(0).key() << " center=" << bm->flashCenter;
++      if (bm->radius<minRad) {
++	//this is the triggering flash
++	mbkey = ibm;
++	minRad = bm->radius;
++      }
++    }
++  }
++  mf::LogTrace{ "ICARUSTrueNuSliceHitsProducer" } << "mbkey=" << mbkey;
++  if (doFlashAssn){
++    if (slkey>=0 && mbkey>=0) {
++      art::Ptr<recob::Slice> slp(inputSlice,slkey);
++      outputSlcFlhAssns->addSingle(slp,mfl.at(mbkey).at(0));
++    }
++  }
++
++  e.put(std::move(outputHits));
++  e.put(std::move(assocSliceHitKeys));
++  e.put(std::move(outputSpacepoints));
++  e.put(std::move(outputSpsHitAssns));
++  if (doFlashAssn) e.put(std::move(outputSlcFlhAssns));
++}
++
++DEFINE_ART_MODULE(ICARUSTrueNuSliceHitsProducer)
+diff --git a/icaruscode/TPC/NuGraph/StitchingUtils.h b/icaruscode/TPC/NuGraph/StitchingUtils.h
+new file mode 100644
+index 00000000..0d1605b1
+--- /dev/null
++++ b/icaruscode/TPC/NuGraph/StitchingUtils.h
+@@ -0,0 +1,54 @@
++/**
++ * @file   icaruscode/NuGraph/StitchingUtils.h
++ * @brief  Utilities to stitch together the different logical TPCs in each cryostat.
++ * @author Giuseppe Cerati ( cerati@fnal.gov )
++ * @date   June 05, 2025
++ *
++ * This library provides utilities to stitch together the different logical TPCs in each cryostat.
++ * As a result, a single time vs wire coordinate system can be used in each cryostat.
++ *
++ * This is a header-only library.
++ */
++
++#ifndef ICARUSCODE_NUGRAPH_STITCHINGUTILS_H
++#define ICARUSCODE_NUGRAPH_STITCHINGUTILS_H
++
++#include "larcoreobj/SimpleTypesAndConstants/geo_types.h"
++
++namespace util {
++
++  int stitchedPlane(const geo::WireID wid) {
++    // Swap Induction2 and Collection planes in TPC 2 and 3 because of
++    // the different wires orientation on the two sides of the cathode.
++    // As a result, planes with the same wire orientation have the same id,
++    // allowing for seamless stitching.
++    int plane = wid.Plane;
++    if(wid.TPC==2 || wid.TPC==3) {
++      if(wid.Plane==1) plane=2;
++      else if(wid.Plane==2) plane=1;
++    }
++    return plane;
++  }
++
++  float stitchedTime(const geo::WireID wid, float timein) {
++    float time = timein;
++    if(wid.TPC==2 || wid.TPC==3) {
++      // correction = 2*(tpcgeo.DriftDistance()/detProp.DriftVelocity()-clockData.TriggerOffsetTPC())/clockData.TPCClock().TickPeriod() = 6442.15 us
++      time = 6442.15 - timein;
++    }
++    return time;
++  }
++
++  size_t stitchedWire(const geo::WireID wid) {
++    size_t wire = wid.Wire;
++    int plane = stitchedPlane(wid);
++    if(wid.TPC==1 || wid.TPC==3) {
++      if(plane==1 || plane == 2) {
++	wire = wid.Wire + 2535; ///< 2535 is the last part of the wires in cryos 0 an 1 before the cut in z=0
++      }
++    }
++    return wire;
++  }
++
++} // namespace util
++#endif
+diff --git a/icaruscode/TPC/NuGraph/analyzers/nugraph_analyzer.fcl b/icaruscode/TPC/NuGraph/analyzers/nugraph_analyzer.fcl
+new file mode 100644
+index 00000000..94351c2e
+--- /dev/null
++++ b/icaruscode/TPC/NuGraph/analyzers/nugraph_analyzer.fcl
+@@ -0,0 +1,29 @@
++process_name: analyzeinference
++
++source: {
++   module_type: RootInput
++   maxEvents:   -1
++}
++
++services: {
++   TFileService: { fileName: "NuGraphTree.root" }
++}
++
++
++physics: {
++   analyzers: {
++      NuGraphAnaCryoE: { 
++         module_type:   "NuGraphAnalyzer" 
++         NuGraphLabel: "NuGraphCryoE"
++      }
++      NuGraphAnaCryoW: { 
++         module_type:   "NuGraphAnalyzer" 
++         NuGraphLabel: "NuGraphCryoW"
++      }
++   }
++
++   reco:       []
++   ana:        [ NuGraphAnaCryoE, NuGraphAnaCryoW ]
++
++   end_paths:  [ ana ]
++}
+\ No newline at end of file
+diff --git a/icaruscode/TPC/NuGraph/analyzers/nugraph_analyzer_icarus.fcl b/icaruscode/TPC/NuGraph/analyzers/nugraph_analyzer_icarus.fcl
+new file mode 100644
+index 00000000..cb02a7d6
+--- /dev/null
++++ b/icaruscode/TPC/NuGraph/analyzers/nugraph_analyzer_icarus.fcl
+@@ -0,0 +1,38 @@
++process_name: analyzeinference
++
++source: {
++   module_type: RootInput
++   maxEvents:   -1
++}
++
++services: {
++   TFileService: { fileName: "NuGraphTree.root" }
++}
++
++
++physics: {
++   analyzers: {
++
++      NuGraphAnaCryoE: {
++         module_type:   "ICARUSNuGraphAnalyzer"
++         NuGraphLabel: "NGMultiSliceCryoE"
++         # NuGraphLabel: "NuGraphCryoE"
++         SliceLabel: "NCCSlicesCryoE"
++         PandoraLabel: "pandoraGausCryoE"
++      }
++      NuGraphAnaCryoW: {
++         module_type:   "ICARUSNuGraphAnalyzer"
++         NuGraphLabel: "NGMultiSliceCryoW"
++         # NuGraphLabel: "NuGraphCryoW"
++         SliceLabel: "NCCSlicesCryoW"
++         PandoraLabel: "pandoraGausCryoW"
++      }
++      
++   }
++
++   reco:       []
++
++   ana:        [ NuGraphAnaCryoE, NuGraphAnaCryoW ] #, NuGraphAnaTaggedSliceCryoE, NuGraphAnaTaggedSliceCryoW ]
++
++   end_paths:  [ ana ]
++}
+diff --git a/icaruscode/TPC/NuGraph/analyzers/pandora_analyzer_icarus.fcl b/icaruscode/TPC/NuGraph/analyzers/pandora_analyzer_icarus.fcl
+new file mode 100644
+index 00000000..64264925
+--- /dev/null
++++ b/icaruscode/TPC/NuGraph/analyzers/pandora_analyzer_icarus.fcl
+@@ -0,0 +1,31 @@
++process_name: analyzeinference
++
++source: {
++   module_type: RootInput
++   maxEvents:   -1
++}
++
++services: {
++   TFileService: { fileName: "PandoraHitTree.root" }
++}
++
++
++physics: {
++   analyzers: {
++      PandoraHitDumpAnaCryoE: { 
++         module_type:  "ICARUSPandoraHitDumpAnalyzer" 
++         HitLabel:     "cluster3DCryoE"
++         PandoraLabel: "pandoraGausCryoE"
++      }
++      PandoraHitDumpAnaCryoW: { 
++         module_type:  "ICARUSPandoraHitDumpAnalyzer" 
++         HitLabel:     "cluster3DCryoW"
++         PandoraLabel: "pandoraGausCryoW"
++      }
++   }
++
++   reco:       []
++   ana:        [ PandoraHitDumpAnaCryoE, PandoraHitDumpAnaCryoW ]
++
++   end_paths:  [ ana ]
++}
+\ No newline at end of file
+diff --git a/icaruscode/TPC/NuGraph/hdf5maker_icarus_slice.fcl b/icaruscode/TPC/NuGraph/hdf5maker_icarus_slice.fcl
+new file mode 100644
+index 00000000..399d72c6
+--- /dev/null
++++ b/icaruscode/TPC/NuGraph/hdf5maker_icarus_slice.fcl
+@@ -0,0 +1,94 @@
++###
++### fcl file for producing the hdf5 files used as input for NuGraph training.
++### Author: G. Cerati (FNAL)
++###
++
++#include "services_common_icarus.fcl"
++#include "services_icarus_simulation.fcl"
++
++process_name: makehdf5
++
++services:
++{
++  TFileService:          { fileName: "reco_hist.root" }
++  TimeTracker:           {}
++  MemoryTracker:         {}
++  RandomNumberGenerator: {}
++  FileCatalogMetadata:   @local::art_file_catalog_mc
++  @table::icarus_common_services
++  @table::icarus_backtracking_services 
++  message:               @local::icarus_message_services_prod_debug
++  ParticleInventoryService: { 
++        ParticleInventory: {
++        EveIdCalculator: "EmEveIdCalculator"
++        G4ModuleLabel: "largeant"
++	OverrideRealData: true
++     }
++  }
++
++                         
++} # services
++
++source:
++{
++  module_type: RootInput
++  maxEvents:   -1
++}
++
++physics:
++{
++
++  analyzers:
++  {
++    hdf5maker: {
++      module_type:  "ICARUSHDF5Maker"
++      TruthLabel:   "generator"
++      SPLabel: "nuslhits"
++      HitLabel: "nuslhits"
++      OpFlashLabel:"opflashCryoE"
++      OpHitLabel:"ophit"
++      UseMap: false
++      OutputName:   "NeutrinoML"
++    }
++  }
++
++ producers:
++  {
++    #nuslhitsE: { 
++    #  module_type: "ICARUSNuSliceHitsProducer"
++    #  BaryMatchLabel: "tpcpmtbarycentermatchCryoE"
++    #  SliceLabel:    "pandoraGausCryoE"
++    #  SpsLabel:      "cluster3DCryoE"
++    #}
++    #nuslhitsW: { 
++    #  module_type: "ICARUSNuSliceHitsProducer"
++    #  BaryMatchLabel: "tpcpmtbarycentermatchCryoW"
++    #  SliceLabel:    "pandoraGausCryoW"
++    #  SpsLabel:      "cluster3DCryoW"
++    #}
++    #nuslhits: {
++    #  module_type:             "HitMerger"
++    #  HitProducerLabelVec:     ["nuslhitsE","nuslhitsW"]
++    #}
++    nuslhits: { 
++      #module_type: "ICARUSNuSliceHitsProducer"
++      module_type: "ICARUSTrueNuSliceHitsProducer"
++      BaryMatchLabel: "tpcpmtbarycentermatchCryoE"
++      SliceLabel:    "pandoraGausCryoE"
++      SpsLabel:      "cluster3DCryoE"
++      DoFlashAssn: true
++    }
++    # sps: cluster3DCryoE
++  }
++ 
++ #reco: [nuslhitsE,nuslhitsW,nuslhits]
++ reco: [nuslhits]
++ ana:       [ hdf5maker ]
++  
++ trigger_paths:       [ reco ]
++ end_paths:     [ ana ]
++  
++}
++
++services.BackTrackerService.BackTracker.G4ModuleLabel: "largeant"
++services.BackTrackerService.BackTracker.SimChannelModuleLabel: "merge"
+diff --git a/icaruscode/TPC/NuGraph/nugraph_icarus.fcl b/icaruscode/TPC/NuGraph/nugraph_icarus.fcl
+new file mode 100644
+index 00000000..d843d294
+--- /dev/null
++++ b/icaruscode/TPC/NuGraph/nugraph_icarus.fcl
+@@ -0,0 +1,86 @@
++#include "nugraph.fcl"
++
++BEGIN_PROLOG
++
++nuslhitsCryoE: {
++  module_type:    "ICARUSNuSliceHitsProducer"
++  BaryMatchLabel: "tpcpmtbarycentermatchCryoE"
++  SliceLabel:     "pandoraGausCryoE"
++  SpsLabel:       "cluster3DCryoE"
++}
++
++nuslhitsCryoW: {
++  module_type:    "ICARUSNuSliceHitsProducer"
++  BaryMatchLabel: "tpcpmtbarycentermatchCryoW"
++  SliceLabel:     "pandoraGausCryoW"
++  SpsLabel:       "cluster3DCryoW"
++}
++
++NCCSlices: {
++  module_type:  "ICARUSNCCSlicesProducer"
++  PandoraLabel: "pandoraGausCryoE"
++  ClusterLabel: "cluster3DCryoE"
++}
++
++NCCSlicesCryoE: @local::NCCSlices
++NCCSlicesCryoW: @local::NCCSlices
++NCCSlicesCryoW.PandoraLabel: "pandoraGausCryoW"
++NCCSlicesCryoW.ClusterLabel: "cluster3DCryoW"
++
++NuGraphCryoE: @local::NuGraphLibTorch
++NuGraphCryoE.LoaderTool.tool_type: "ICARUSNuGraphLoader"
++NuGraphCryoE.LoaderTool.hitInput: "nuslhitsCryoE"
++NuGraphCryoE.LoaderTool.spsInput: "nuslhitsCryoE"
++NuGraphCryoE.DecoderTools.SemanticDecoderTool.hitInput: "nuslhitsCryoE"
++NuGraphCryoE.avgs_u: [168.04594 , 178.3245  , 266.6149 , 3.857218 ]
++NuGraphCryoE.avgs_v: [1245.3547 , 176.54117 , 323.52786, 4.3267984]
++NuGraphCryoE.avgs_y: [1225.5012 , 183.58075 , 310.83493, 4.3409133]
++NuGraphCryoE.devs_u: [ 82.80644 ,  67.60649 , 274.32666, 1.2912455]
++NuGraphCryoE.devs_v: [ 293.06314,  66.8194  , 322.11386, 1.4249923]
++NuGraphCryoE.devs_y: [ 307.1943 ,  67.063324, 312.461  , 1.4532351]
++NuGraphCryoE.modelFileName: "model_mpvmpr_bnb_numu_cos.pt"
++# NuGraphCryoE.debug: true
++
++NuGraphCryoW: @local::NuGraphCryoE
++NuGraphCryoW.LoaderTool.hitInput: "nuslhitsCryoW"
++NuGraphCryoW.LoaderTool.spsInput: "nuslhitsCryoW"
++NuGraphCryoW.DecoderTools.SemanticDecoderTool.hitInput: "nuslhitsCryoW"
++
++NGMultiSliceCryoE: @local::NuGraphCryoE
++NGMultiSliceCryoE.module_type: ICARUSNuGraphInference
++NGMultiSliceCryoE.SlicesLabel: "NCCSlicesCryoE"
++NGMultiSliceCryoE.HitLabel: "pandoraGausCryoE"
++NGMultiSliceCryoE.debug: false
++NGMultiSliceCryoE.LoaderTool.tool_type: "ICARUSNuGraphMultiLoader"
++NGMultiSliceCryoE.LoaderTool.PandoraLabel: "pandoraGausCryoE"
++NGMultiSliceCryoE.LoaderTool.SlicesLabel: "NCCSlicesCryoE"
++NGMultiSliceCryoE.LoaderTool.ClusterLabel: "cluster3DCryoE"
++NGMultiSliceCryoE.DecoderTools.FilterDecoderTool.hitInput: "cluster3DCryoE"
++NGMultiSliceCryoE.DecoderTools.SemanticDecoderTool.hitInput: "cluster3DCryoE"
++
++NGMultiSliceCryoW: @local::NGMultiSliceCryoE
++NGMultiSliceCryoW.SlicesLabel: "NCCSlicesCryoW"
++NGMultiSliceCryoW.HitLabel: "pandoraGausCryoW"
++NGMultiSliceCryoW.LoaderTool.PandoraLabel: "pandoraGausCryoW"
++NGMultiSliceCryoW.LoaderTool.SlicesLabel: "NCCSlicesCryoW"
++NGMultiSliceCryoW.LoaderTool.ClusterLabel: "cluster3DCryoW"
++NGMultiSliceCryoW.DecoderTools.FilterDecoderTool.hitInput: "cluster3DCryoW"
++NGMultiSliceCryoW.DecoderTools.SemanticDecoderTool.hitInput: "cluster3DCryoW"
++
++ngfilteredhitsCryoE: {
++  module_type:  "ICARUSFilteredNuSliceHitsProducer"
++  SliceLabel:   "NCCSlicesCryoE"
++  PandoraLabel: "pandoraGausCryoE"
++  NuGraphLabel: "NGMultiSliceCryoE"
++  ScoreCut:     0.5
++}
++
++ngfilteredhitsCryoW: {
++  module_type:  "ICARUSFilteredNuSliceHitsProducer"
++  SliceLabel:   "NCCSlicesCryoW"
++  PandoraLabel: "pandoraGausCryoW"
++  NuGraphLabel: "NGMultiSliceCryoW"
++  ScoreCut:     0.5
++}
++
++END_PROLOG
+diff --git a/icaruscode/TPC/NuGraph/scripts/CMakeLists.txt b/icaruscode/TPC/NuGraph/scripts/CMakeLists.txt
+new file mode 100644
+index 00000000..e0f7a8d2
+--- /dev/null
++++ b/icaruscode/TPC/NuGraph/scripts/CMakeLists.txt
+@@ -0,0 +1,4 @@
++install_scripts(
++  "setup_tritonserver-nugraph-v0.sh"
++  "setup_tritonserver-nugraph-v0_grid.sh"
++  )
+diff --git a/icaruscode/TPC/NuGraph/scripts/setup_tritonserver-nugraph-v0.sh b/icaruscode/TPC/NuGraph/scripts/setup_tritonserver-nugraph-v0.sh
+new file mode 100755
+index 00000000..31506929
+--- /dev/null
++++ b/icaruscode/TPC/NuGraph/scripts/setup_tritonserver-nugraph-v0.sh
+@@ -0,0 +1,8 @@
++#!/bin/bash
++
++unset PYTHONHOME
++unset PYTHONPATH
++rm -f tritonserver_nugraph-v0.log
++export APPTAINER_BIND=/etc/hosts,/tmp,/cvmfs
++/cvmfs/oasis.opensciencegrid.org/mis/apptainer/1.3.2/bin/apptainer run --pid --ipc --home ~/:${HOME} --pwd ${PWD} /cvmfs/icarus.opensciencegrid.org/containers/tritonserver/nugraph-v0/ >& tritonserver_nugraph-v0.log &
++grep -q "Started" <(tail -f tritonserver_nugraph-v0.log)
+diff --git a/icaruscode/TPC/NuGraph/scripts/setup_tritonserver-nugraph-v0_grid.sh b/icaruscode/TPC/NuGraph/scripts/setup_tritonserver-nugraph-v0_grid.sh
+new file mode 100755
+index 00000000..174a461d
+--- /dev/null
++++ b/icaruscode/TPC/NuGraph/scripts/setup_tritonserver-nugraph-v0_grid.sh
+@@ -0,0 +1,31 @@
++#!/bin/bash
++#
++unset PYTHONHOME
++unset PYTHONPATH
++rm -f tritonserver_nugraph-v0.log
++export APPTAINER_BIND=/etc/hosts,/tmp,/cvmfs
++#
++export BASEPORT=8000
++export NPORTS=3
++#
++export HTTPPORT=$BASEPORT
++export GRPCPORT=$((BASEPORT+1))
++export METRPORT=$((BASEPORT+2))
++#
++if [ -z "$FCL" ]; then 
++    export FCL=$1
++fi
++#
++while 2>/dev/null >"/dev/tcp/0.0.0.0/$BASEPORT"; do
++    BASEPORT=$((BASEPORT+NPORTS))
++    export HTTPPORT=$BASEPORT
++    export GRPCPORT=$((BASEPORT+1))
++    export METRPORT=$((BASEPORT+2))
++done
++#
++echo "physics.producers.NuGraphCryoE.TritonConfig.serverURL: 'localhost:${GRPCPORT}'" >> "$FCL"
++echo "physics.producers.NuGraphCryoW.TritonConfig.serverURL: 'localhost:${GRPCPORT}'" >> "$FCL"
++#
++/cvmfs/oasis.opensciencegrid.org/mis/apptainer/1.3.2/bin/apptainer exec --pid --ipc --home ~/:${HOME} --pwd ${PWD} /cvmfs/icarus.opensciencegrid.org/containers/tritonserver/nugraph-v0/ tritonserver --model-repository /triton-server-config/models --http-port=${HTTPPORT} --grpc-port=${GRPCPORT} --metrics-port=${METRPORT} >& tritonserver_nugraph-v0.log &
++#
++grep -q "Started" <(tail -f tritonserver_nugraph-v0.log)
+diff --git a/icaruscode/TPC/NuGraph/testinference_slice_icarus.fcl b/icaruscode/TPC/NuGraph/testinference_slice_icarus.fcl
+new file mode 100644
+index 00000000..84ceca64
+--- /dev/null
++++ b/icaruscode/TPC/NuGraph/testinference_slice_icarus.fcl
+@@ -0,0 +1,114 @@
++###
++### Test fcl file for NuGraph inference. For each cryostat it runs two producers (ICARUSNuSliceHitsProducer and NuGraphInference) plus one analyzer (NuGraphAnalyzer).
++### Author: G. Cerati (FNAL)
++###
++
++#include "nugraph_icarus.fcl"
++#include "services_common_icarus.fcl"
++#include "services_icarus_simulation.fcl"
++
++process_name: testinference
++
++services:
++{
++  TFileService:          { fileName: "reco_hist.root" }
++  TimeTracker:           {}
++  MemoryTracker:         {}
++  RandomNumberGenerator: {}
++  @table::icarus_common_services
++  @table::icarus_backtracking_services 
++  message:               @local::icarus_message_services_prod_debug
++  ParticleInventoryService: { 
++        ParticleInventory: {
++        EveIdCalculator: "EmEveIdCalculator"
++        G4ModuleLabel: "largeant"
++	OverrideRealData: true
++     }
++  }
++}
++
++source:
++{
++  module_type: RootInput
++  maxEvents:   -1
++}
++
++outputs:
++{
++ rootOutput:
++ {
++   module_type: RootOutput
++   dataTier: "reconstructed"
++   compressionLevel: 1
++   saveMemoryObjectThreshold: 0
++   fileName: "%ifb_%tc-%p.root"
++   fileProperties: {maxInputFiles: 1}
++   checkFileName: false
++   SelectEvents: []
++   outputCommands: [
++         "keep *_*_*_*"
++         #"drop *_*_*_*",
++         #"keep *_*_*_testinference"
++     ]
++ }
++}
++
++physics:
++{
++
++  producers:
++  {
++    nuslhitsCryoE: @local::nuslhitsCryoE
++    nuslhitsCryoW: @local::nuslhitsCryoW
++    #nuslhits: {
++    #  module_type:             "HitMerger"
++    #  HitProducerLabelVec:     ["nuslhitsCryoE","nuslhitsCryoW"]
++    #}
++    NuGraphCryoE: @local::NuGraphCryoE
++    NuGraphCryoW: @local::NuGraphCryoW
++  }
++  analyzers:
++  {
++    NuGraphAnaCryoE: { 
++      module_type: "NuGraphAnalyzer"
++      NuGraphLabel: "NuGraphCryoE"
++    }
++    NuGraphAnaCryoW: { 
++      module_type: "NuGraphAnalyzer"
++      NuGraphLabel: "NuGraphCryoW"
++    }
++  }
++
++  reco: [nuslhitsCryoE, nuslhitsCryoW, NuGraphCryoE, NuGraphCryoW]
++  #reco: [ nuslhitsCryoE, NuGraphCryoE]
++  trigger_paths:       [ reco ]
++
++  ana: [NuGraphAnaCryoE,NuGraphAnaCryoW]
++  #ana: [NuGraphAnaCryoE]
++  streamROOT:         [ rootOutput ]
++  end_paths:          [ ana, streamROOT ]
++}
++
++#physics.producers.nuslhitsCryoE.module_type: "ICARUSTrueNuSliceHitsProducer"
++#physics.producers.nuslhitsCryoW.module_type: "ICARUSTrueNuSliceHitsProducer"
++
++#physics.producers.NuGraphCryoE.debug: true
++#physics.producers.NuGraphCryoW.debug: true
++
++services.BackTrackerService.BackTracker.G4ModuleLabel: "largeant"
++services.BackTrackerService.BackTracker.SimChannelModuleLabel: "daq:simpleSC"
++
++
++### Parameters and instructions to test the NuSonic inference model (still under development)
++# in order to setup the triton server locally, please do:
++# > mrbslp
++# > setup_tritonservier-nugraph-v0.sh
++# then after the job you can kill the server process with:
++# > killall -9 /cvmfs/oasis.opensciencegrid.org/mis/apptainer/1.3.2/x86_64/libexec/apptainer/libexec/starter
++#NuGraphCryoE: @local::ApptainerNuGraphNuSonicTriton
++#NuGraphCryoE.LoaderTool.tool_type: "ICARUSNuGraphLoader"
++#NuGraphCryoE.LoaderTool.hitInput: "nuslhitsCryoE"
++#NuGraphCryoE.LoaderTool.spsInput: "nuslhitsCryoE"
++#NuGraphCryoE.DecoderTools.SemanticDecoderTool.hitInput: "nuslhitsCryoE"
++#NuGraphCryoE.TritonConfig.modelName: "nugraph2_icarus_mpvmprbnb"
++
+diff --git a/icaruscode/TPC/Tracking/ICARUSPandora/pandoramodules_icarus.fcl b/icaruscode/TPC/Tracking/ICARUSPandora/pandoramodules_icarus.fcl
+index 89936687..37294bf3 100644
+--- a/icaruscode/TPC/Tracking/ICARUSPandora/pandoramodules_icarus.fcl
++++ b/icaruscode/TPC/Tracking/ICARUSPandora/pandoramodules_icarus.fcl
+@@ -18,6 +18,8 @@ icarus_basicpandora:
+     ShouldRunNeutrinoRecoOption:                 false
+     ShouldRunCosmicRecoOption:                   false
+     ShouldPerformSliceId:                        false
++    # CollectHitPredictions:                       false
++    # UseHitPredictions:                           false
+     PrintOverallRecoStatus:                      false
+     HitCollectionTool:                           { tool_type: LArPandoraHitCollectionToolICARUS }
+ }

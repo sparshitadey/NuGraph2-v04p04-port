@@ -1,0 +1,3 @@
+A,B,tree_name,n_A,n_B,n_common,n_only_A,n_only_B,frac_A_in_B,frac_B_in_A,jaccard
+v10_06_00_01p01,v10_06_00_04p04,metadata/metatree,2,2,2,0,0,1.0,1.0,1.0
+v10_06_00_01p01,v10_06_00_04p04,recTree,2055,2075,2055,0,20,1.0,0.9903614457831326,0.9903614457831326

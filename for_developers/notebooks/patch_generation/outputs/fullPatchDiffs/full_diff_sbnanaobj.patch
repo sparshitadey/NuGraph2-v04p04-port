@@ -1,0 +1,147 @@
+diff --git a/sbnanaobj/StandardRecord/SRNuGraphScore.cxx b/sbnanaobj/StandardRecord/SRNuGraphScore.cxx
+index 32828d0..5d1452f 100644
+--- a/sbnanaobj/StandardRecord/SRNuGraphScore.cxx
++++ b/sbnanaobj/StandardRecord/SRNuGraphScore.cxx
+@@ -1 +1,16 @@
+ #include "sbnanaobj/StandardRecord/SRNuGraphScore.h"
++
++namespace caf
++{
++
++  SRNuGraphSliceInfo::SRNuGraphSliceInfo() : 
++    mip_hits(INT_MIN),
++    hip_hits(INT_MIN),
++    shr_hits(INT_MIN),
++    mhl_hits(INT_MIN),
++    dif_hits(INT_MIN),
++    ng_vtx_hip_hits(INT_MIN),
++    unclustered_shr_hits(INT_MIN)
++  {  }
++
++} // end namespace caf
+\ No newline at end of file
+diff --git a/sbnanaobj/StandardRecord/SRNuGraphScore.h b/sbnanaobj/StandardRecord/SRNuGraphScore.h
+index ae4b7b4..e16f1ab 100644
+--- a/sbnanaobj/StandardRecord/SRNuGraphScore.h
++++ b/sbnanaobj/StandardRecord/SRNuGraphScore.h
+@@ -5,9 +5,32 @@
+ #define SRNuGraphSCORE_H
+ 
+ #include "sbnanaobj/StandardRecord/SRConstants.h"
++#include <climits>
+ 
+ namespace caf {
+ 
++  /**
++  * @brief Information on the slice by NuGraph.
++  *
++  * This object summarizes the results from running NuGraph over hits in a slice
++  * (see e.g. [https://sbn-docdb.fnal.gov/cgi-bin/sso/ShowDocument?docid=40585](SBN DocDB 40585).
++  *
++  * The number of HIP hits is computed for a circle around the vertex in each plane.
++  */
++  class SRNuGraphSliceInfo {
++  public:
++  
++    SRNuGraphSliceInfo();
++
++    int mip_hits;             ///< Number of hits tagged as `MIP`.
++    int hip_hits;             ///< Number of hits tagged as `HIP`.
++    int shr_hits;             ///< Number of hits tagged as `Shower`.
++    int mhl_hits;             ///< Number of hits tagged as `Michel`.
++    int dif_hits;             ///< Number of hits tagged as `Diffuse`.
++    int ng_vtx_hip_hits;      ///< Number of hits tagged as `HIP` around the reconstructed interaction vertex.
++    int unclustered_shr_hits; ///< Number of hits tagged as `Shower` not belonging to any reconstructed Pandora PFP object.
++  };
++
+   /**
+   * @brief Categorization of the object/PFP by NuGraph.
+   *
+@@ -37,6 +60,7 @@ namespace caf {
+     float dif_frac = caf::kSignalingNaN; ///< Fraction of hits that are labeled as `Diffuse`.
+     float bkg_frac = caf::kSignalingNaN; ///< Fraction of hits that are labeled as `Background`.
+   };
++  
+ }
+ 
+ #endif
+diff --git a/sbnanaobj/StandardRecord/SRSlice.cxx b/sbnanaobj/StandardRecord/SRSlice.cxx
+index 85f0e1e..7a2fd8f 100644
+--- a/sbnanaobj/StandardRecord/SRSlice.cxx
++++ b/sbnanaobj/StandardRecord/SRSlice.cxx
+@@ -11,15 +11,11 @@ namespace caf
+   SRSlice::SRSlice()
+   {  }
+ 
+-
+   SRSlice::~SRSlice(){  }
+ 
+-
+   void SRSlice::setDefault()
+   {
+     charge         = -5;
+   }
+-
+-
+ } // end namespace caf
+ ////////////////////////////////////////////////////////////////////////
+diff --git a/sbnanaobj/StandardRecord/SRSlice.h b/sbnanaobj/StandardRecord/SRSlice.h
+index 2e6508f..2aa2eca 100644
+--- a/sbnanaobj/StandardRecord/SRSlice.h
++++ b/sbnanaobj/StandardRecord/SRSlice.h
+@@ -18,6 +18,7 @@
+ #include "sbnanaobj/StandardRecord/SRNuID.h"
+ #include "sbnanaobj/StandardRecord/SRConstants.h"
+ #include "sbnanaobj/StandardRecord/SRCVNScore.h"
++#include "sbnanaobj/StandardRecord/SRNuGraphScore.h"
+ 
+ #include <climits>
+ 
+@@ -56,11 +57,13 @@ namespace caf
+       bool is_clear_cosmic { false };         //!< Whether pandora marks the slice as a "clear" cosmic
+       int nu_pdg           { INT_MIN };       //!< PDG assigned to the PFParticle Neutrino
+       float nu_score       { kSignalingNaN }; //!< Score of how neutrino-like the slice is according to pandora
+-      float ng_filt_pass_frac { kSignalingNaN }; //!< Fraction of slice hits that pass the nugraph filter decoder
+-      SRCRUMBSResult crumbs_result;  //!< Score of how neutrino-like the slice is according to the CRUMBS ID
+-
+       SRNuID nuid; //!< Neutrino ID Features (BDT inputs) going into nu_score calculation
+ 
++      float ng_filt_pass_frac { kSignalingNaN };  //!< Fraction of slice hits that pass the NuGraph2 filter decoder
++      SRNuGraphSliceInfo ng_plane[3];  //!< Slice-level NuGraph2 information, provided for each plane
++
++      SRCRUMBSResult crumbs_result; //!< Score of how neutrino-like the slice is according to the CRUMBS ID
++      
+       std::vector<size_t> primary;             //!< ID's of primary tracks and showers in slice
+       int                 self { INT_MIN };    //!< ID of the particle representing this slice
+ 
+diff --git a/sbnanaobj/StandardRecord/classes_def.xml b/sbnanaobj/StandardRecord/classes_def.xml
+index 6833f07..dec1a5c 100644
+--- a/sbnanaobj/StandardRecord/classes_def.xml
++++ b/sbnanaobj/StandardRecord/classes_def.xml
+@@ -46,6 +46,13 @@
+    <version ClassVersion="10" checksum="705810055"/>
+   </class>
+ 
++  <class name="caf::SRNuGraphSliceInfo" ClassVersion="15" >
++   <version ClassVersion="15" checksum="2711257956"/>
++   <version ClassVersion="14" checksum="809065913"/>
++   <version ClassVersion="13" checksum="290910659"/>
++   <version ClassVersion="12" checksum="434873519"/>
++  </class>
++
+   <class name="caf::SRHit" ClassVersion="10">
+    <version ClassVersion="10" checksum="1494967532"/>
+   </class>
+@@ -71,7 +78,11 @@
+    <version ClassVersion="10" checksum="83320005"/>
+   </class>
+ 
+-  <class name="caf::SRSlice" ClassVersion="22">
++  <class name="caf::SRSlice" ClassVersion="26">
++   <version ClassVersion="26" checksum="2614728424"/>
++   <version ClassVersion="25" checksum="3061622568"/>
++   <version ClassVersion="24" checksum="2614728424"/>
++   <version ClassVersion="23" checksum="3732772050"/>
+    <version ClassVersion="22" checksum="2124497341"/>
+    <version ClassVersion="21" checksum="3825441135"/>
+    <version ClassVersion="20" checksum="1917004696"/>

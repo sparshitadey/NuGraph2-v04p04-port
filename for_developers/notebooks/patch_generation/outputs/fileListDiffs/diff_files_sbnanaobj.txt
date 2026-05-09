@@ -1,0 +1,5 @@
+sbnanaobj/StandardRecord/SRNuGraphScore.cxx
+sbnanaobj/StandardRecord/SRNuGraphScore.h
+sbnanaobj/StandardRecord/SRSlice.cxx
+sbnanaobj/StandardRecord/SRSlice.h
+sbnanaobj/StandardRecord/classes_def.xml

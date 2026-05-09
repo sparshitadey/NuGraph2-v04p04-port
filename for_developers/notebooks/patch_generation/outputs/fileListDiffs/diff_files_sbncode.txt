@@ -1,0 +1,4 @@
+sbncode/CAFMaker/CAFMakerParams.h
+sbncode/CAFMaker/CAFMaker_module.cc
+sbncode/CAFMaker/FillReco.cxx
+sbncode/CAFMaker/FillReco.h

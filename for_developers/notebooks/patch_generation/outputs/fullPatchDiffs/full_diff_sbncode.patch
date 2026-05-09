@@ -1,0 +1,500 @@
+diff --git a/sbncode/CAFMaker/CAFMakerParams.h b/sbncode/CAFMaker/CAFMakerParams.h
+index 253f0d4c..93ffab1c 100644
+--- a/sbncode/CAFMaker/CAFMakerParams.h
++++ b/sbncode/CAFMaker/CAFMakerParams.h
+@@ -350,10 +350,10 @@ namespace caf
+       "" //Empty by default, configured in icaruscode cafmaker_defs
+     };
+ 
+-    Atom<art::InputTag> NuGraphSliceHitLabel {
+-      Name("NuGraphSliceHitLabel"),
+-      Comment("Label of NuGraph slice hit map."),
+-      "" //Empty by default, please set to e.g. art::InputTag("nuslhits")
++    Atom<art::InputTag> NuGraphSlicesLabel {
++      Name("NuGraphSlicesLabel"),
++      Comment("Label of slices that have NuGraph inference."),
++      "" //Empty by default, please set to e.g. art::InputTag("NCCSlices")
+     };
+ 
+     Atom<art::InputTag> NuGraphFilterLabel {
+@@ -368,6 +368,30 @@ namespace caf
+       "" //Empty by default, please set to e.g. art::InputTag("NuGraph","semantic")
+     };
+ 
++    Atom<bool> UsePandoraAfterNuGraph {
++      Name("UsePandoraAfterNuGraph"),
++      Comment("Whether to use the second pass Pandora outputs for NuGraph reco."),
++      false
++    };
++    
++    Atom<float> NuGraphFilterCut {
++      Name("NuGraphFilterCut"),
++      Comment("Cut on the NuGraph2 filter score to define hit as signal or noise."),
++      0.5
++    };
++
++    Atom<float> NuGraphHIPTagWireDist {
++      Name("NuGraphHIPTagWireDist"),
++      Comment("TPC wire distance from the vertex used to count NuGraph2–tagged HIP hits."),
++      10
++    };
++
++    Atom<float> NuGraphHIPTagTickDist {
++      Name("NuGraphHIPTagTickDist"),
++      Comment("TPC tick distance from the vertex used to count NuGraph-2–tagged HIP hits."),
++      50
++    };
++
+     Atom<string> OpFlashLabel {
+       Name("OpFlashLabel"),
+       Comment("Label of PMT flash."),
+diff --git a/sbncode/CAFMaker/CAFMaker_module.cc b/sbncode/CAFMaker/CAFMaker_module.cc
+index 48da84e8..f96a3161 100644
+--- a/sbncode/CAFMaker/CAFMaker_module.cc
++++ b/sbncode/CAFMaker/CAFMaker_module.cc
+@@ -1717,15 +1717,23 @@ void CAFMaker::produce(art::Event& evt) noexcept {
+ 
+   // collect the TPC slices
+   std::vector<art::Ptr<recob::Slice>> slices;
++  std::vector<art::Ptr<recob::Slice>> nuGraphSlices;
+   std::vector<std::string> slice_tag_suffixes;
+   std::vector<unsigned> slice_tag_indices;
+   for (unsigned i_tag = 0; i_tag < pandora_tag_suffixes.size(); i_tag++) {
+     const std::string &pandora_tag_suffix = pandora_tag_suffixes[i_tag];
++
+     // Get a handle on the slices
+     art::Handle<std::vector<recob::Slice>> thisSlices;
+     GetByLabelStrict(evt, fParams.PFParticleLabel() + pandora_tag_suffix, thisSlices);
++
+     if (thisSlices.isValid()) {
+       art::fill_ptr_vector(slices, thisSlices);
++      if (fParams.UsePandoraAfterNuGraph()) {
++        nuGraphSlices = slices;
++      } else {
++        nuGraphSlices = evt.getProduct<std::vector<art::Ptr<recob::Slice>>>(fParams.NuGraphSlicesLabel().label() + pandora_tag_suffix);
++      }
+       for (unsigned i = 0; i < thisSlices->size(); i++) {
+         slice_tag_suffixes.push_back(pandora_tag_suffix);
+         slice_tag_indices.push_back(i_tag);
+@@ -1733,17 +1741,6 @@ void CAFMaker::produce(art::Event& evt) noexcept {
+     }
+   }
+ 
+-  // nu graph
+-  std::vector< art::Handle<std::vector<unsigned int>> > ng2_slice_hit_map_handle(pandora_tag_suffixes.size());
+-  std::vector< art::Handle<std::vector<anab::FeatureVector<1>>> > ng2_filter_handle(pandora_tag_suffixes.size());
+-  std::vector< art::Handle<std::vector<anab::FeatureVector<5>>> > ng2_semantic_handle(pandora_tag_suffixes.size());
+-  for (unsigned i_tag = 0; i_tag < pandora_tag_suffixes.size(); i_tag++) {
+-    const std::string &pandora_tag_suffix = pandora_tag_suffixes[i_tag];
+-    GetByLabelIfExists(evt, fParams.NuGraphSliceHitLabel().encode() + pandora_tag_suffix, ng2_slice_hit_map_handle[i_tag]);
+-    GetByLabelIfExists(evt, fParams.NuGraphFilterLabel().label() + pandora_tag_suffix + ":" + fParams.NuGraphFilterLabel().instance(), ng2_filter_handle[i_tag]);
+-    GetByLabelIfExists(evt, fParams.NuGraphSemanticLabel().label() + pandora_tag_suffix + ":" + fParams.NuGraphSemanticLabel().instance(), ng2_semantic_handle[i_tag]);
+-  }
+-
+   // The Standard Record
+   // Branch entry definition -- contains list of slices, CRT information, and truth information
+   StandardRecord rec;
+@@ -1799,19 +1796,7 @@ void CAFMaker::produce(art::Event& evt) noexcept {
+         fmatch_assn_map.emplace(std::make_pair(fname_opdet, sfm_assn));
+       }
+     }
+-
+-    std::vector<art::Ptr<anab::FeatureVector<1>>> ng2_filter_vec;
+-    std::vector<art::Ptr<anab::FeatureVector<5>>> ng2_semantic_vec;
+-    if (ng2_filter_handle[producer].isValid()) {
+-      art::fill_ptr_vector(ng2_filter_vec,ng2_filter_handle[producer]);
+-    }
+-    if (ng2_semantic_handle[producer].isValid()) {
+-      art::fill_ptr_vector(ng2_semantic_vec,ng2_semantic_handle[producer]);
+-    }
+-    if (ng2_slice_hit_map_handle[producer].isValid()) {
+-      FillSliceNuGraph(slcHits,*ng2_slice_hit_map_handle[producer],ng2_filter_vec,ng2_semantic_vec,recslc);
+-    }
+-
++    
+     art::FindManyP<sbn::OpT0Finder> fmOpT0 =
+       FindManyPStrict<sbn::OpT0Finder>(sliceList, evt, fParams.OpT0Label() + slice_tag_suff);
+     std::vector<art::Ptr<sbn::OpT0Finder>> slcOpT0;
+@@ -1865,15 +1850,15 @@ void CAFMaker::produce(art::Event& evt) noexcept {
+     // make Ptr's to clusters for cluster -> other object associations
+     if (fmPFPClusters.isValid()) {
+       for (size_t ipf=0; ipf<fmPFPart.size();++ipf) {
+-	std::vector<art::Ptr<recob::Hit>> pfphits;
+-	std::vector<art::Ptr<recob::Cluster>> pfclusters = fmPFPClusters.at(ipf);
+-	art::FindManyP<recob::Hit> fmCluHits = FindManyPStrict<recob::Hit>(pfclusters, evt, fParams.PFParticleLabel() + slice_tag_suff);
+-	for (size_t icl=0; icl<fmCluHits.size();icl++) {
+-	  for (auto hit : fmCluHits.at(icl)) {
+-	    pfphits.push_back(hit);
+-	  }
+-	}
+-	fmPFPartHits.push_back(pfphits);
++        std::vector<art::Ptr<recob::Hit>> pfphits;
++        std::vector<art::Ptr<recob::Cluster>> pfclusters = fmPFPClusters.at(ipf);
++        art::FindManyP<recob::Hit> fmCluHits = FindManyPStrict<recob::Hit>(pfclusters, evt, fParams.PFParticleLabel() + slice_tag_suff);
++        for (size_t icl=0; icl<fmCluHits.size();icl++) {
++          for (auto hit : fmCluHits.at(icl)) {
++            pfphits.push_back(hit);
++          }
++        }
++        fmPFPartHits.push_back(pfphits);
+       }
+     }
+ 
+@@ -2043,8 +2028,8 @@ void CAFMaker::produce(art::Event& evt) noexcept {
+     // primary particle and meta-data
+     const recob::PFParticle *primary = (iPart == fmPFPart.size()) ? NULL : fmPFPart[iPart].get();
+     const larpandoraobj::PFParticleMetadata *primary_meta = (iPart == fmPFPart.size()) ? NULL : fmPFPMeta.at(iPart).at(0).get();
+-    // get the flash match
+ 
++    // get the flash match
+     std::map<std::string, const sbn::SimpleFlashMatch*> fmatch_map;
+     std::map<std::string, art::FindManyP<sbn::SimpleFlashMatch>>::iterator fmatch_it;
+     for(fmatch_it = fmatch_assn_map.begin();fmatch_it != fmatch_assn_map.end();fmatch_it++) {
+@@ -2060,12 +2045,58 @@ void CAFMaker::produce(art::Event& evt) noexcept {
+         }
+       }
+     }
++
+     // get the primary vertex
+     const recob::Vertex *vertex = (iPart == fmPFPart.size() || !fmVertex.at(iPart).size()) ? NULL : fmVertex.at(iPart).at(0).get();
+ 
+     //#######################################################
+     // Add slice info.
+     //#######################################################
++    if (std::find(nuGraphSlices.begin(), nuGraphSlices.end(), slice) != nuGraphSlices.end()) {
++      std::vector<art::Ptr<anab::FeatureVector<1>>> ng2_filter_vec;
++      std::vector<art::Ptr<anab::FeatureVector<5>>> ng2_semantic_vec;
++      art::FindOneP<anab::FeatureVector<1>> findOneFilter(slcHits, evt, fParams.NuGraphFilterLabel().label() + slice_tag_suff + ":" + fParams.NuGraphFilterLabel().instance());
++      art::FindOneP<anab::FeatureVector<5>> findOneSemantic(slcHits, evt, fParams.NuGraphSemanticLabel().label() + slice_tag_suff + ":" + fParams.NuGraphSemanticLabel().instance());
++
++      // filter
++      if (findOneFilter.isValid()) {
++        ng2_filter_vec.reserve(slcHits.size());
++        for (size_t hitIdx = 0; hitIdx < slcHits.size(); ++hitIdx) {
++          ng2_filter_vec.emplace_back(findOneFilter.at(hitIdx));
++        }
++      }
++
++      // semantic tagging
++      if (findOneSemantic.isValid()) {
++        ng2_semantic_vec.reserve(slcHits.size());
++        for (size_t hitIdx = 0; hitIdx < slcHits.size(); ++hitIdx) {
++          ng2_semantic_vec.emplace_back(findOneSemantic.at(hitIdx));
++        }
++      }
++
++      // vertex projection onto the three wire planes
++      float vtx_wire[3];
++      float vtx_tick[3];
++
++      if (vertex != NULL) {
++        auto const& tpcID = geom->FindTPCAtPosition(vertex->position());
++        if (tpcID.isValid) {
++          for (geo::PlaneID const& p : wireReadout.Iterate<geo::PlaneID>()) {
++            auto const& planeID = geo::PlaneID{tpcID, p.Plane};
++            const geo::PlaneGeo& planeGeo = wireReadout.Plane(planeID);
++            vtx_wire[p.Plane] = planeGeo.WireCoordinate(vertex->position()); ///< wire projection
++            vtx_tick[p.Plane] = dprop.ConvertXToTicks(vertex->position().X(), planeID); ///< drift projection
++          }
++        }
++      }
++
++      if (ng2_filter_vec.size() > 0 || ng2_semantic_vec.size() > 0) {
++        FillSliceNuGraph(slcHits, ng2_filter_vec, ng2_semantic_vec, fmPFPartHits, 
++                         vtx_wire, vtx_tick, fParams.NuGraphHIPTagWireDist(), fParams.NuGraphHIPTagTickDist(), 
++                         fParams.NuGraphFilterCut(), recslc);
++      }
++    }
++
+     FillSliceVars(*slice, primary, producer, recslc);
+     FillSliceMetadata(primary_meta, recslc);
+     FillSliceFlashMatch(fmatch_map["fmatch"], recslc.fmatch);
+@@ -2189,8 +2220,32 @@ void CAFMaker::produce(art::Event& evt) noexcept {
+         FillCNNScores(thisParticle, cnnScores, pfp);
+       }
+ 
+-      if (ng2_slice_hit_map_handle[producer].isValid()) {
+-	FillPFPNuGraph(*ng2_slice_hit_map_handle[producer], ng2_filter_vec, ng2_semantic_vec, fmPFPartHits.at(iPart), pfp);
++      if (std::find(nuGraphSlices.begin(), nuGraphSlices.end(), slice) != nuGraphSlices.end()) {
++        std::vector<art::Ptr<recob::Hit>>& PFPHits = fmPFPartHits.at(iPart);
++        art::FindOneP<anab::FeatureVector<1>> findOneFilter(PFPHits, evt, fParams.NuGraphFilterLabel().label() + slice_tag_suff + ":" + fParams.NuGraphFilterLabel().instance());
++        art::FindOneP<anab::FeatureVector<5>> findOneSemantic(PFPHits, evt, fParams.NuGraphSemanticLabel().label() + slice_tag_suff + ":" + fParams.NuGraphSemanticLabel().instance());
++        std::vector<art::Ptr<anab::FeatureVector<1>>> ng2_filter_vec;
++        std::vector<art::Ptr<anab::FeatureVector<5>>> ng2_semantic_vec;
++
++        // filter
++        if (findOneFilter.isValid()) {
++          ng2_filter_vec.reserve(PFPHits.size());
++          for (size_t hitIdx = 0; hitIdx < PFPHits.size(); ++hitIdx) {
++            ng2_filter_vec.emplace_back(findOneFilter.at(hitIdx));
++          }
++        }
++
++        // semantic tagging
++        if (findOneSemantic.isValid()) {
++          ng2_semantic_vec.reserve(PFPHits.size());
++          for (size_t hitIdx = 0; hitIdx < PFPHits.size(); ++hitIdx) {
++            ng2_semantic_vec.emplace_back(findOneSemantic.at(hitIdx));
++          }
++        }
++
++        if (ng2_filter_vec.size() > 0 || ng2_semantic_vec.size() > 0) {
++          FillPFPNuGraph(PFPHits, ng2_filter_vec, ng2_semantic_vec, fParams.NuGraphFilterCut(), pfp);
++        }
+       }
+ 
+       if (!thisTrack.empty())  { // it has a track!
+diff --git a/sbncode/CAFMaker/FillReco.cxx b/sbncode/CAFMaker/FillReco.cxx
+index d81cb589..7f99cf43 100644
+--- a/sbncode/CAFMaker/FillReco.cxx
++++ b/sbncode/CAFMaker/FillReco.cxx
+@@ -12,8 +12,6 @@
+ 
+ namespace caf
+ {
+-  const float ng_filter_cut = 0.5;
+-
+   //......................................................................
+   bool SelectSlice(const caf::SRSlice &slice, bool cut_clear_cosmic) {
+     return (!slice.is_clear_cosmic || !cut_clear_cosmic) // No clear cosmics
+@@ -581,22 +579,107 @@ namespace caf
+   }
+ 
+   void FillSliceNuGraph(const std::vector<art::Ptr<recob::Hit>> &inputHits,
+-			const std::vector<unsigned int> &sliceHitsMap,
+ 			const std::vector<art::Ptr<anab::FeatureVector<1>>> &ngFilterResult,
+ 			const std::vector<art::Ptr<anab::FeatureVector<5>>> &ngSemanticResult,
++      const std::vector<std::vector<art::Ptr<recob::Hit>>> &fmPFPartHits,
++      const float vtx_wire[3], 
++      const float vtx_tick[3],
++      const float vtx_wire_dist, 
++      const float vtx_tick_dist,
++      const float filter_cut,
+ 			caf::SRSlice &slice)
+   {
+ 
+-    //need to double check that the slice processed by NuGraph is the same under consideration
+-    //std::cout << "sizes=" << inputHits.size() << " " << sliceHitsMap.size() << " " << ngFilterResult.size() << " " << ngSemanticResult.size() << std::endl;
++    // NuGraph2 filter fraction
+     unsigned int nHits = inputHits.size();
+-    if (nHits==0 || nHits!=sliceHitsMap.size() || inputHits[0].key()!=sliceHitsMap[0]) return;//not the same slice!
+-
+     unsigned int npass = 0;
++
+     for ( unsigned int i = 0; i < nHits; i++ ) {
+-      if (ngFilterResult.at(i)->at(0)>=ng_filter_cut) npass++;
++      if (ngFilterResult.at(i).isNull()) continue;
++      if (ngFilterResult.at(i)->at(0) >= filter_cut) npass++;
++    }
++    slice.ng_filt_pass_frac = (nHits > 0) ? float(npass) / nHits : 0.f;
++
++    // look-up between hits and PFPs
++    std::set<art::Ptr<recob::Hit>> pfpHitSet;
++    for (const auto& pfpHits : fmPFPartHits) {
++      for (const auto& hit : pfpHits) {
++        if (hit) pfpHitSet.insert(hit);
++      }
++    }
++
++    // NuGraph2 plane-by-plane slice variables
++    for (unsigned int plane = 0; plane < 3; ++plane) {
++
++      int nMIPHits = 0;             ///< `MIP` hits in the slice
++      int nHIPHits = 0;             ///< `HIP` hits in the slice
++      int nShrHits = 0;             ///< `Shower` hits in the slice
++      int nMhlHits = 0;             ///< `Michel` hits in the slice
++      int nDifHits = 0;             ///< `Diffuse` hits in the slice
++      int nVtxHIPHits = 0;          ///< `HIP` hits in the slice around the vertex
++      int nUnclusteredShrHits = 0;  ///< `Shower` hits in the slice not belonging to a PFP
++
++      for ( unsigned int i = 0; i < nHits; i++ ) {
++        const recob::Hit& hit = *inputHits.at(i);
++        if (hit.WireID().Plane != plane) continue;
++
++        if (ngSemanticResult.at(i).isNull()) continue;
++
++        auto const& sem = *ngSemanticResult.at(i);
++        std::vector<float> semVec;
++        for (size_t k = 0; k < sem.size(); ++k) semVec.push_back(sem.at(k));
++        auto highestScoreIdx = std::distance(
++          semVec.begin(), 
++          std::max_element(semVec.begin(), semVec.end())
++        );
++
++        // `MIP` hits
++        if (highestScoreIdx == SRNuGraphScore::NuGraphCategory::MIP) {
++          nMIPHits += 1;
++        }
++
++        // `HIP` hits
++        if (highestScoreIdx == SRNuGraphScore::NuGraphCategory::HIP) {
++          nHIPHits += 1;
++
++          // `HIP` hits at vertex
++          float dwire = std::abs(float(hit.WireID().Wire) - vtx_wire[plane]);
++          float dtick = std::abs(hit.PeakTime() - vtx_tick[plane]);    
++          if ((dwire <= vtx_wire_dist) && (dtick <= vtx_tick_dist)) {
++            nVtxHIPHits += 1;
++          }
++        }
++
++        // `Shower` hits
++        if (highestScoreIdx == SRNuGraphScore::NuGraphCategory::Shower) {
++          nShrHits += 1;
++
++          // `Shower` hits not clustered by Pandora
++          art::Ptr<recob::Hit> hitPtr = inputHits.at(i);
++          if (pfpHitSet.find(hitPtr) == pfpHitSet.end()) {
++            nUnclusteredShrHits += 1;
++          }
++        }
++
++        // `Michel` hits
++        if (highestScoreIdx == SRNuGraphScore::NuGraphCategory::Michel) {
++          nMhlHits += 1;
++        }
++
++        // `Diffuse` hits
++        if (highestScoreIdx == SRNuGraphScore::NuGraphCategory::Diffuse) {
++          nDifHits += 1;
++        }
++      }
++
++      slice.ng_plane[plane].mip_hits = nMIPHits;
++      slice.ng_plane[plane].hip_hits = nHIPHits;
++      slice.ng_plane[plane].shr_hits = nShrHits;
++      slice.ng_plane[plane].mhl_hits = nMhlHits;
++      slice.ng_plane[plane].dif_hits = nDifHits;
++      slice.ng_plane[plane].ng_vtx_hip_hits = nVtxHIPHits;
++      slice.ng_plane[plane].unclustered_shr_hits = nUnclusteredShrHits;
+     }
+-    slice.ng_filt_pass_frac = float(npass)/nHits;
+   }
+ 
+   //......................................................................
+@@ -1024,39 +1107,34 @@ namespace caf
+     srpfp.cnnscore.nclusters = cnnscore->nClusters;
+   }
+ 
+-  void FillPFPNuGraph(const std::vector<unsigned int> &sliceHitsMap,
++  void FillPFPNuGraph(const std::vector<art::Ptr<recob::Hit>> &pfpHits,
+ 		      const std::vector<art::Ptr<anab::FeatureVector<1>>> &ngFilterResult,
+ 		      const std::vector<art::Ptr<anab::FeatureVector<5>>> &ngSemanticResult,
+-		      const std::vector<art::Ptr<recob::Hit>> &pfpHits,
++          const float filter_cut,
+ 		      caf::SRPFP& srpfp,
+ 		      bool allowEmpty)
+   {
++    if (pfpHits.size() > 0) {
++      std::vector<float> ng2sempfpcounts(5, 0);
++      size_t ng2bkgpfpcount = 0;
+ 
+-    // the nugraph elements are ordered the same as the sliceHitsMap
+-    std::vector<size_t> mappedhits;
+-    for (auto& hit : pfpHits) {
+-      auto it = std::find(sliceHitsMap.begin(), sliceHitsMap.end(), hit.key());
+-      if (it != sliceHitsMap.end()) {
+-	size_t index = std::distance(sliceHitsMap.begin(), it);
+-	mappedhits.push_back(index);
+-      }
+-    }
++      for (size_t pos = 0; pos < pfpHits.size(); pos++) {
+ 
+-    if (mappedhits.size()>0) {
+-      std::vector<float> ng2sempfpcounts(5,0);
+-      size_t ng2bkgpfpcount = 0;
+-      for (size_t pos : mappedhits) {
+-	auto const& bkgscore = ngFilterResult.at(pos);
+-	if (bkgscore->at(0)<ng_filter_cut) {
+-	  ng2bkgpfpcount++;
+-	} else {
+-	  auto const& scores = ngSemanticResult.at(pos);
+-	  std::vector<float> ng2semscores;
+-	  for (size_t i=0;i<scores->size();i++) ng2semscores.push_back(scores->at(i));
+-	  size_t sem_label = std::distance(ng2semscores.begin(), std::max_element(ng2semscores.begin(), ng2semscores.end()));//arg_max(ng2semscores);
+-	  ng2sempfpcounts[sem_label]++;
+-	}
++        if (ngFilterResult.at(pos).isNull()) continue;
++
++	      auto const& bkgscore = ngFilterResult.at(pos);
++	      if (bkgscore->at(0) < filter_cut) {
++	        ng2bkgpfpcount++;
++	      } else {
++          if (ngSemanticResult.at(pos).isNull()) continue;
++          auto const& scores = ngSemanticResult.at(pos);
++          std::vector<float> ng2semscores;
++          for (size_t i=0;i<scores->size();i++) ng2semscores.push_back(scores->at(i));
++          size_t sem_label = std::distance(ng2semscores.begin(), std::max_element(ng2semscores.begin(), ng2semscores.end()));//arg_max(ng2semscores);
++          ng2sempfpcounts[sem_label]++;
++        }
+       }
++
+       srpfp.ngscore.sem_cat = SRNuGraphScore::NuGraphCategory(std::distance(ng2sempfpcounts.begin(), std::max_element(ng2sempfpcounts.begin(), ng2sempfpcounts.end())));//arg_max(ng2sempfpcounts);
+       size_t nonBkgHits = (pfpHits.size() > ng2bkgpfpcount ? pfpHits.size()-ng2bkgpfpcount : 0);
+       srpfp.ngscore.mip_frac = (nonBkgHits>0 ? float(ng2sempfpcounts[0])/nonBkgHits : -1.);
+@@ -1074,7 +1152,6 @@ namespace caf
+       srpfp.ngscore.dif_frac = -1.;
+       srpfp.ngscore.bkg_frac = -1.;
+     }
+-
+   }
+ 
+   void FillHitVars(const recob::Hit& hit,
+diff --git a/sbncode/CAFMaker/FillReco.h b/sbncode/CAFMaker/FillReco.h
+index 6e8ecf29..211f791f 100644
+--- a/sbncode/CAFMaker/FillReco.h
++++ b/sbncode/CAFMaker/FillReco.h
+@@ -109,18 +109,28 @@ namespace caf
+   /**
+    * @brief Fills the results from NuGraph at slice level
+    * @param inputHits (pointers to) the hits associated to the slice
+-   * @param sliceHitsMap maps position of hits in collection input to NuGraph (slice only) to the one input to Pandora (all gaus hits)
+    * @param ngFilterResult NuGraph filter result, for each hit
+-   * @param ngSemanticResult NuGraph semnatic result, for each hit (MIP track, HIP, shower, Michel electron, diffuse activity)
++   * @param ngSemanticResult NuGraph semantic result, for each hit (MIP track, HIP, shower, Michel electron, diffuse activity)
++   * @param fmPFPartHits vector of pointers-to-hits lists, for each PFP
++   * @param vtx_wire vertex coordinates projected onto wires, per plane
++   * @param vtx_tick vertex coordinates projected onto ticks, per plane
++   * @param vtx_wire_dist TPC wire distance from the vertex used to count NuGraph2–tagged HIP hits
++   * @param vtx_tick_dist TPC tick distance from the vertex used to count NuGraph2–tagged HIP hits
++   * @param filter_cut cut on the NuGraph2 filter score to define hit as signal or noise
+    * @param[out] slice the destination slice object
+    *
+    * Hits with filter value (`ngFilterResult`) lower than `ng_filter_cut` are counted as background.
+    */
+   void FillSliceNuGraph(const std::vector<art::Ptr<recob::Hit>> &inputHits,
+-			const std::vector<unsigned int> &sliceHitsMap,
+-			const std::vector<art::Ptr<anab::FeatureVector<1>>> &ngFilterResult,
+-			const std::vector<art::Ptr<anab::FeatureVector<5>>> &ngSemanticResult,
+-			caf::SRSlice &slice);
++                        const std::vector<art::Ptr<anab::FeatureVector<1>>> &ngFilterResult,
++                        const std::vector<art::Ptr<anab::FeatureVector<5>>> &ngSemanticResult,
++                        const std::vector<std::vector<art::Ptr<recob::Hit>>> &fmPFPartHits,
++                        const float vtx_wire[3], 
++                        const float vtx_tick[3],
++                        const float vtx_wire_dist, 
++                        const float vtx_tick_dist,
++                        const float filter_cut,
++                        caf::SRSlice &slice);
+ 
+   bool SelectSlice(const caf::SRSlice &slice, bool cut_clear_cosmic);
+ 
+@@ -153,15 +163,16 @@ namespace caf
+    * @param sliceHitsMap maps position of hits in collection input to NuGraph (slice only) to the one input to Pandora (all gaus hits)
+    * @param ngFilterResult NuGraph filter result, for each hit
+    * @param ngSemanticResult NuGraph semnatic result, for each hit (MIP track, HIP, shower, Michel electron, diffuse activity)
++   * @param filter_cut cut on the NuGraph2 filter score to define hit as signal or noise
+    * @param pfpHits Vector of hits associated to the PFParticle
+    * @param[out] srpfp the destination PFParticle object
+    *
+    * Hits with filter value (`ngFilterResult`) lower than `ng_filter_cut` are counted as background.
+    */
+-  void FillPFPNuGraph(const std::vector<unsigned int> &sliceHitsMap,
++  void FillPFPNuGraph(const std::vector<art::Ptr<recob::Hit>> &pfpHits,
+ 		      const std::vector<art::Ptr<anab::FeatureVector<1>>> &ngFilterResult,
+ 		      const std::vector<art::Ptr<anab::FeatureVector<5>>> &ngSemanticResult,
+-		      const std::vector<art::Ptr<recob::Hit>> &pfpHits,
++          const float filter_cut,
+ 		      caf::SRPFP& srpfp,
+ 		      bool allowEmpty= false);
+ 

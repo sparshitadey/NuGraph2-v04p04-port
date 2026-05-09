@@ -1,0 +1,6 @@
+larpandora/LArPandoraInterface/LArPandora.cxx
+larpandora/LArPandoraInterface/LArPandora.h
+larpandora/LArPandoraInterface/LArPandoraHelper.cxx
+larpandora/LArPandoraInterface/LArPandoraHelper.h
+larpandora/LArPandoraInterface/LArPandoraInput.cxx
+larpandora/LArPandoraInterface/LArPandoraInput.h
