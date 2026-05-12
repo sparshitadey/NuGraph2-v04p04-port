@@ -314,6 +314,50 @@ Leonardo's `feature/nugraph-multislice` branch fixes this by building a sorted k
 
 ---
 
+### Fix 5: Missing CAFMaker FCL for Overlay + NuGraph Reconstruction
+**File:** `icaruscode/fcl/caf/cafmakerjob_icarus_detsim2d_systtools_and_fluxwgt_overlay_NuGraphReco.fcl` *(new file)*
+
+Running `cafmakerjob_icarus_detsim2d_systtools_and_fluxwgt_NuGraphReco.fcl` on overlay samples caused a fatal `cet::exception` crash inside `cafmaker` on the first event:
+
+```
+terminate called after throwing an instance of 'cet::exception'
+what():  ---- ParticleInventory BEGIN
+Attempt to find MCTruth for TrackId: 1 has failed.
+---- ParticleInventory END
+```
+
+Overlay files contain two MCParticle collections — `largeant` (signal G4 only) and `simplemerge` (merged signal+background) — but the MCParticle→MCTruth Assns only exist under the `largeant` label. The `ParticleInventory` service (configured with `G4ModuleLabel: "largeant"`) cannot backtrack hits associated to `simplemerge` particles, causing the lookup to fail. The plain `NuGraphReco` FCL inherits the pure-MC base and is unaware of overlay products.
+
+No combined overlay+NuGraph FCL existed in the suite. The fix is a new FCL that inherits the overlay producer swap and `cafmaker_add_overlay_icarus.fcl` from the overlay base, then applies NuGraph2 label overrides last (order matters — the overlay include must come before the NuGraph overrides to avoid being clobbered).
+
+```fcl
+#include "cafmakerjob_icarus_detsim2d_systtools_and_fluxwgt.fcl"
+
+# overwrite the producers to use data versions (from overlay base)
+physics.producers: @local::caf_preprocess_data_producers
+physics.runprod: [ @sequence::caf_preprocess_data_sequence, rns, systtools, fluxweight, cafmaker]
+
+physics.producers.cafmaker.SystWeightLabels: ["systtools", "fluxweight"]
+
+#include "cafmaker_add_detsim2d_icarus.fcl"
+#include "cafmaker_add_overlay_icarus.fcl"
+
+## Always refer to the original hit collection
+physics.producers.cafmaker.HitLabel: "cluster3D"
+
+## Grab the second-pass Pandora reconstruction, after NuGraph2's filter
+physics.producers.cafmaker.PFParticleLabel: "pandoraGausNuGraphReco"
+
+## Use NuGraph2's PID after NuGraph2's filter
+physics.producers.cafmaker.UsePandoraAfterNuGraph: true
+physics.producers.cafmaker.NuGraphFilterLabel: "ngfilteredhits:filter"
+physics.producers.cafmaker.NuGraphSemanticLabel: "ngfilteredhits:semantic"
+```
+
+> This FCL should live in `icaruscode/fcl/caf/` and be submitted as a PR to SBNSoftware/icaruscode. It is required for any CAF production over overlay samples using NuGraph2 reconstruction.
+
+---
+
 ## 🔀 Pipeline: Before and After
 
 ### Before (initial v04p04 port -- crashes in FilterDecoder)
@@ -415,7 +459,7 @@ The following changes should be submitted as pull requests to their upstream rep
 | Pandora `cluster3DCryoE` switch | SBNSoftware/icaruscode | Discuss with Riccardo -- has physics implications |
 | NuGraph2 port (all 5 repos) | SBNSoftware/icaruscode etc. | After validation on more events |
 | 2D model to cvmfs | icarus\_data | Coordinate with Riccardo |
-
+| New overlay+NuGraph CAFMaker FCL | SBNSoftware/icaruscode | High -- required to run CAFs on overlay samples with NuGraph reco |
 ---
 
 ## 🛠️ For Developers
