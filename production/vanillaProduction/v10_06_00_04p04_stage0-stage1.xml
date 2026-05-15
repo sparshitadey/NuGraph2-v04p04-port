@@ -1,0 +1,59 @@
+<?xml version="1.0"?>
+
+<!-- Production Project -->
+
+<!DOCTYPE project [
+<!ENTITY release      "v10_06_00_04p04" >
+<!ENTITY file_type    "mc" > 
+<!ENTITY run_type     "bnb"   >
+<!ENTITY name         "BNB_v10_06_00_04p04">
+<!ENTITY nevents      "10">
+<!ENTITY num_jobs     "1">
+<!ENTITY scratch_dir  "/pnfs/icarus/scratch/users/sdey2/v10_06_00_04p04/standard">
+<!ENTITY resilient_dir "/pnfs/icarus/resilient/users/sdey2">
+]>
+
+<job>
+  
+  <project name="&name;">
+  
+  <!-- Project size -->
+  <numevents>&nevents;</numevents>
+  
+  <!-- Operating System -->
+  <os>SL7</os>
+  
+  <!-- Batch resources -->
+  <resource>DEDICATED,OPPORTUNISTIC</resource>
+  
+  <larsoft>
+    <tag>&release;</tag>
+    <qual>e26:prof</qual>
+    <local>&resilient_dir;/tarballs/icaruscode-workingarea-v10_06_00_04p04.tar.gz</local>
+  </larsoft>
+
+  <stage name="stage1"> <!-- Stage1 reconstruction -->
+    <fcl>stage1_run2_icarus_overlay_slimout.fcl</fcl>
+    <outdir>&scratch_dir;/&name;/stage1/test_1job</outdir>
+    <!-- FIX 2: workdir moved to resilient (scratch doesn't support POSIX ops project.py needs) -->
+    <workdir>&resilient_dir;/workdirs/&name;/stage1</workdir>
+    <logdir>&scratch_dir;/&name;/stage1/test_1job</logdir>
+    <bookdir>&scratch_dir;/&name;/stage1/test_1job</bookdir>
+    <numjobs>&num_jobs;</numjobs>
+    <inputlist>/exp/icarus/app/users/sdey2/fileLists/BNBstage0_v10_06_00_04p04_MCOverlays2025A.list</inputlist>
+    <datatier>reconstructed</datatier>
+    <memory>8000</memory>
+    <!-- FIX 1: SL7 Singularity container flags required on modern Fermigrid nodes -->
+    <jobsub>--expected-lifetime=2h --generate-email-summary -l +SingularityImage="/cvmfs/singularity.opensciencegrid.org/fermilab/fnal-wn-sl7:latest" --append_condor_requirements='(TARGET.HAS_SINGULARITY=?=true)'</jobsub>
+    <disk>100GB</disk>
+  </stage>
+
+  <!-- file type -->
+  <filetype>&file_type;</filetype>
+  
+  <!-- run type -->
+  <runtype>&run_type;</runtype>
+
+</project>
+
+</job>

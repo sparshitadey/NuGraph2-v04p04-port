@@ -1,0 +1,91 @@
+<?xml version="1.0"?>
+
+<!-- Vanilla Production: stage0 ROOT -> stage1 -> flat CAF
+     Release:  v10_06_00_04p04  (2D deconvolution + Wiremod)
+     No NuGraph. For NuGraph version see BNB_NuGraph_v10_06_00_04p04.xml
+     Author:   sdey2
+-->
+
+<!DOCTYPE project [
+<!ENTITY release       "v10_06_00_04p04" >
+<!ENTITY file_type     "mc"  >
+<!ENTITY run_type      "bnb"   >
+<!ENTITY name          "BNB_v10_06_00_04p04">
+<!ENTITY nevents       "10">
+<!ENTITY num_jobs_s1   "1">
+<!ENTITY num_jobs_caf  "1">
+<!ENTITY scratch_dir   "/pnfs/icarus/scratch/users/sdey2/v10_06_00_04p04/standard">
+<!ENTITY resilient_dir "/pnfs/icarus/resilient/users/sdey2">
+]>
+
+<job>
+
+  <project name="&name;">
+
+    <!-- Project size -->
+    <numevents>&nevents;</numevents>
+
+    <!-- Operating System -->
+    <os>SL7</os>
+
+    <!-- Batch resources -->
+    <resource>DEDICATED,OPPORTUNISTIC</resource>
+
+    <larsoft>
+      <tag>&release;</tag>
+      <qual>e26:prof</qual>
+      <local>&resilient_dir;/tarballs/icaruscode-workingarea-v10_06_00_04p04.tar.gz</local>
+    </larsoft>
+
+    <!-- ============================================================
+         STAGE 1: stage0 ROOT -> stage1 reconstruction
+         ============================================================ -->
+    <stage name="stage1">
+      <fcl>stage1_run2_icarus_overlay_slimout.fcl</fcl>
+
+      <outdir>&scratch_dir;/&name;/stage1/test_1job</outdir>
+      <workdir>&resilient_dir;/workdirs/&name;/stage1</workdir>
+      <logdir>&scratch_dir;/&name;/stage1/test_1job</logdir>
+      <bookdir>&scratch_dir;/&name;/stage1/test_1job</bookdir>
+
+      <numjobs>&num_jobs_s1;</numjobs>
+      <inputlist>/exp/icarus/app/users/sdey2/fileLists/BNBstage0_v10_06_00_04p04_MCOverlays2025A.list</inputlist>
+
+      <datatier>reconstructed</datatier>
+      <memory>8000</memory>
+      <disk>100GB</disk>
+      <jobsub>--expected-lifetime=2h --generate-email-summary -l +SingularityImage="/cvmfs/singularity.opensciencegrid.org/fermilab/fnal-wn-sl7:latest" --append_condor_requirements='(TARGET.HAS_SINGULARITY=?=true)'</jobsub>
+    </stage>
+
+    <!-- ============================================================
+         CAF STAGE: stage1 ROOT -> flat CAF
+         inputlist: after stage1 completes run:
+           project.py xml <this_file> stage stage1 check
+         then pass the resulting files.list here
+         ============================================================ -->
+    <stage name="caf">
+      <fcl>cafmakerjob_icarus_detsim2d_systtools_and_fluxwgt_overlay.fcl</fcl>
+
+      <outdir>&scratch_dir;/&name;/caf</outdir>
+      <workdir>&resilient_dir;/workdirs/&name;/caf</workdir>
+      <logdir>&scratch_dir;/&name;/caf</logdir>
+      <bookdir>&scratch_dir;/&name;/caf</bookdir>
+
+      <numjobs>&num_jobs_caf;</numjobs>
+      <inputlist>FILL_IN_AFTER_STAGE1_COMPLETES</inputlist>
+
+      <datatier>reconstructed</datatier>
+      <memory>4000</memory>
+      <disk>160GB</disk>
+      <jobsub>--expected-lifetime=3h --generate-email-summary -l +SingularityImage="/cvmfs/singularity.opensciencegrid.org/fermilab/fnal-wn-sl7:latest" --append_condor_requirements='(TARGET.HAS_SINGULARITY=?=true)'</jobsub>
+    </stage>
+
+    <!-- file type -->
+    <filetype>&file_type;</filetype>
+
+    <!-- run type -->
+    <runtype>&run_type;</runtype>
+
+  </project>
+
+</job>
