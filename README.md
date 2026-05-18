@@ -245,6 +245,12 @@ lar -c stage1_run2_icarus_overlay_NuGraphReco.fcl -n 5 \
   > stage1_nugraph.log 2>&1
 ```
 
+
+### 6. Downstream CAF analysis (cafe macros)
+
+Running CAFAna macros against v04p04 flat CAFs requires a locally built sbnana. The UPS version of sbnana v10_01_01 is compiled for `Linux64bit+3.10-2.17` and causes heap corruption when reading v04p04 CAFs on the gpvms (which run `Linux64bit+5.14-2.17` inside the SL7 container).
+
+See **Option B** in the [icarus-cc1e0pi-reco](https://github.com/sparshitadey/icarus-cc1e0pi-reco) README for the full setup instructions, including how to build sbnana v10_01_01 locally against sbnanaobj v10_00_05.
 ---
 
 ## 🔧 Key Fixes and Changes
