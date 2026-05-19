@@ -1,10 +1,12 @@
 # Grid Production Runbook — v10_06_00_04p04 Vanilla
-Author: Sparshita Dey 
-Last edited: 14th May 2026 
+
+*Author*: Sparshita Dey 
+
+*Last edited*: 14th May 2026 
 --- 
-Pipeline: stage0 BNB ROOT → stage1 (2D deconv + Wiremod) → flat CAF  
-No NuGraph. For NuGraph see `BNB_NuGraph_v10_06_00_04p04.xml`.
-LOCAL (gpvm): See `/exp/icarus/app/users/sdey2/icaruscode-v10_06_00_04p04_production/vanillaProduction/miniProductionOutputRoot`
+- Pipeline: stage0 BNB ROOT → stage1 (2D deconv + Wiremod) → flat CAF  
+- No NuGraph. For NuGraph see `BNB_NuGraph_v10_06_00_04p04.xml`.
+- LOCAL (gpvm): See `/exp/icarus/app/users/sdey2/icaruscode-v10_06_00_04p04_production/vanillaProduction/miniProductionOutputRoot`
 ---
 
 ## 1. Environment setup
