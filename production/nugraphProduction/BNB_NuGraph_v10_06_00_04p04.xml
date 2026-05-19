@@ -53,7 +53,7 @@
       <datatier>reconstructed</datatier>
       <memory>12000</memory>
       <disk>100GB</disk>
-      <jobsub>--expected-lifetime=12h --generate-email-summary -l +SingularityImage="/cvmfs/singularity.opensciencegrid.org/fermilab/fnal-wn-sl7:latest" --append_condor_requirements='(TARGET.HAS_SINGULARITY=?=true)'</jobsub>
+      <jobsub>--expected-lifetime=12h --generate-email-summary -l +SingularityImage="/cvmfs/singularity.opensciencegrid.org/fermilab/fnal-wn-sl7:latest" --append_condor_requirements='(TARGET.HAS_SINGULARITY=?=true)' --env FW_SEARCH_PATH=/pnfs/icarus/resilient/users/sdey2/nugraph_models:.:${FW_SEARCH_PATH}</jobsub>
     </stage>
 
     <!-- ============================================================
