@@ -214,7 +214,7 @@ mrb g -t v10_01_00 lardataobj
 cd lardataobj
 git remote add llena https://github.com/leonardo-lena/lardataobj.git
 git fetch llena
-git checkout -B feature-nugraph-multislice llena/feature/nugraph-multislice
+git checkout -B feature-nugraph-multislice llena/feature-nugraph-multislice
 cd ..
 
 # larrecodnn (Leonardo's branch -- no local changes)
