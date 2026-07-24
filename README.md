@@ -161,6 +161,8 @@ htgettoken -a htvaultprod.fnal.gov -i icarus
 ```bash
 setup icaruscode v10_06_00_04p04 -q e26:prof
 cd /path/to/your/dev_area
+mrb newDev
+cd srcs/
 source localProducts*/setup && mrbslp
 ```
 
