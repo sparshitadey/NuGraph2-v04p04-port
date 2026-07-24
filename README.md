@@ -232,9 +232,9 @@ cd ..
 
 ```bash
 export FW_SEARCH_PATH=/path/to/your/model/directory:$FW_SEARCH_PATH
-cd $MRB_BUILDDIR
+cd $MRB_SOURCE
 mrbsetenv
-mrb i -j8 2>&1 | tee build.log
+mrb i -j20 2>&1 | tee build.log 
 ```
 
 ### 5. Run the NuGraph Stage 1
